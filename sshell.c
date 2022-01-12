@@ -6,8 +6,7 @@
 
 #define CMDLINE_MAX 512
 #define ARG_MAX 16
-#define TOKEN_MAX 32
-
+#define TOKEN_LEN_MAX 32
 
 typedef struct cmdline {
         char *cmd;
@@ -21,7 +20,7 @@ int main(void) {
 
         while (1) {
                 char *nl;
-                int retval;
+                int retval = 0;
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -61,7 +60,20 @@ int main(void) {
                 /* Builtin command */
                 if (!strcmp(c.cmd, "exit")) {
                         fprintf(stderr, "Bye...\n");
+                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         break;
+                } else if (!strcmp(c.cmd, "pwd")) {
+                        char *path = getcwd(NULL, 0);
+                        fprintf(stdout, "%s\n", path);
+                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        continue;
+                } else if (!strcmp(c.cmd, "cd")) {
+                        if (chdir(exec_args[1]) == -1) {
+                                fprintf(stderr, "Error: cannot cd into directory\n");
+                                retval = 1;
+                        }
+                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        continue;
                 }
 
                 /* Regular command */
@@ -78,6 +90,5 @@ int main(void) {
                 }
                 fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
         }
-
         return EXIT_SUCCESS;
 }
