@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #define CMDLINE_MAX 512
 
 int main(void)
 {
         char cmd[CMDLINE_MAX];
+        char *args[] = {cmd, NULL};
 
         while (1) {
                 char *nl;
@@ -38,9 +40,17 @@ int main(void)
                 }
 
                 /* Regular command */
-                retval = system(cmd);
-                fprintf(stdout, "Return status value for '%s': %d\n",
-                        cmd, retval);
+                // retval = system(cmd);
+                int status;
+                if (!fork()) {
+                        execvp(cmd, args);
+                        perror("execvp");
+                        exit(1);
+                } else {
+                        waitpid(-1, &status, 0);
+                        retval = WEXITSTATUS(status);
+                }
+                fprintf(stderr, "+ completed '%s' [%d]\n", cmd, retval);
         }
 
         return EXIT_SUCCESS;
