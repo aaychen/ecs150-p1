@@ -69,8 +69,8 @@ int main(void) {
                         continue;
                 } else if (!strcmp(c.cmd, "cd")) {
                         if (chdir(exec_args[1]) == -1) {
-                                perror("Error: cannot cd into directory\n");
-                                exit(1);
+                                fprintf(stderr, "Error: cannot cd into directory\n");
+                                retval = 1;
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         continue;
