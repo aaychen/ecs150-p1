@@ -69,8 +69,8 @@ int main(void) {
                         continue;
                 } else if (!strcmp(c.cmd, "cd")) {
                         if (chdir(exec_args[1]) == -1) {
-                                fprintf(stderr, "Error: cannot cd into directory\n");
-                                retval = 1;
+                                perror("Error: cannot cd into directory\n");
+                                exit(1);
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         continue;
@@ -78,15 +78,19 @@ int main(void) {
 
                 /* Regular command */
                 int status;
-                if (!fork()) { /* The shell creates a child process */
+                int pid = fork();
+                if (pid == 0) { /* The shell creates a child process */
                         /* The child process runs the command line */
                         execvp(c.cmd, exec_args);
                         perror("execvp");
                         exit(1);
-                } else {
+                } else if (pid > 0) {
                         /* The parent process (the shell) waits for the child process's completion & collects its exit status */
                         waitpid(-1, &status, 0);
                         retval = WEXITSTATUS(status);
+                } else {
+                     perror("fork");
+                     exit(1);   
                 }
                 fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
         }
