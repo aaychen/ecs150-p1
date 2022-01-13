@@ -10,13 +10,12 @@
 
 typedef struct cmdline {
         char *cmd;
-        char *args[ARG_MAX];
+        char *args[ARG_MAX + 2];
 } cmdline;
 
 int main(void) {
         cmdline c;
         char cmdline[CMDLINE_MAX];
-        char *exec_args[ARG_MAX + 2];
 
         while (1) {
                 char *nl;
@@ -51,17 +50,17 @@ int main(void) {
                 
                 token = strtok(buffer, " ");
                 if (token != NULL) {
-                        c.cmd = exec_args[i++] = token;
+                        c.args[i++] = token;
+                        c.cmd = token;
                         token = strtok(NULL, " ");
                 }
 
                 /* Get all arguments */
                 while (token != NULL) {
-                        exec_args[i++] = token;
-                        // c.args[i++] = token;
+                        c.args[i++] = token;
                         token = strtok(NULL, " ");
                 }
-                exec_args[i] = NULL;
+                c.args[i] = NULL;
 
                 /* Builtin command */
                 if (!strcmp(c.cmd, "exit")) {
@@ -74,7 +73,7 @@ int main(void) {
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         continue;
                 } else if (!strcmp(c.cmd, "cd")) {
-                        if (chdir(exec_args[1]) == -1) {
+                        if (chdir(c.args[1]) == -1) {
                                 fprintf(stderr, "Error: cannot cd into directory\n");
                                 retval = 1;
                         }
@@ -87,7 +86,7 @@ int main(void) {
                 int pid = fork();
                 if (pid == 0) { /* The shell creates a child process */
                         /* The child process runs the command line */
-                        execvp(c.cmd, exec_args);
+                        execvp(c.cmd, c.args);
                         perror("execvp");
                         exit(1);
                 } else if (pid > 0) {
