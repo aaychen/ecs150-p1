@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <fcntl.h>
 
 
 #define CMDLINE_MAX 512
@@ -15,14 +16,14 @@ typedef struct cmdline {
         char *cmd;
         char *args[ARG_MAX + 2];
         int numArgs;
-        // bool outRedirect;
-        // char *outputFile;
+        bool hasRedirection;
+        char *outputFileName;
 } cmdline;
 
 void cleanup(cmdline c);
 
 int main(void) {
-        cmdline c = {.numArgs = 0}; // cmdline c = {.outRedirect = false};
+        cmdline c;
         char cmdline[CMDLINE_MAX];
 
         while (1) {
@@ -48,11 +49,24 @@ int main(void) {
                         *nl = '\0';
 
                 /* Parse command line */
+                c.cmd = NULL;
+                c.numArgs = 0;
+                c.hasRedirection = false;
+                c.outputFileName = NULL;
                 int argsIndx = -1;
                 char prevChar = ' ';
                 for (size_t i = 0; i < strlen(cmdline); i++) {
                         char ch = cmdline[i];
-                        if (!isspace(ch)) {
+                        if (ch == '>') {
+                                c.hasRedirection = true;
+                        }
+                        else if (c.hasRedirection && !isspace(ch)) {
+                                if (prevChar == '>' || isspace(prevChar)) {
+                                        c.outputFileName = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                }
+                                strncat(c.outputFileName, &ch, 1);
+                        }
+                        else if (!isspace(ch)) {
                                 if (isspace(prevChar)) {
                                         c.args[++argsIndx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         c.numArgs++;
@@ -61,9 +75,11 @@ int main(void) {
                                 strncat(c.args[argsIndx], &ch, 1);
                                 if (argsIndx == 0) strncat(c.cmd, &ch, 1);
                         }
-                        prevChar = ch;                                                                                                                                                                                       
+                        prevChar = ch;                                                                                                                                                                                   
                 }
                 c.args[++argsIndx] = NULL;
+
+
 
                 /* Builtin command */
                 if (!strcmp(c.cmd, "exit")) {
@@ -89,6 +105,11 @@ int main(void) {
                 int pid = fork();
                 if (pid == 0) { /* The shell creates a child process */
                         /* The child process runs the command line */
+                        if (c.hasRedirection) {
+                                int fd = open(c.outputFileName, O_RDWR | O_CREAT, 0644);
+                                dup2(fd, STDOUT_FILENO);
+                                close(fd);
+                        }
                         execvp(c.cmd, c.args);
                         perror("execvp");
                         exit(1);
@@ -112,5 +133,6 @@ void cleanup(cmdline c) {
         for (int i = 0; i < c.numArgs; i++) {
                 free(c.args[i]);
         }
-        free(c.cmd);
+        if (c.cmd) free(c.cmd);
+        if (c.outputFileName) free(c.outputFileName);
 }
