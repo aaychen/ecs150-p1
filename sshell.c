@@ -3,6 +3,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <stdbool.h>
+#include <ctype.h>
+
 
 #define CMDLINE_MAX 512
 #define ARG_MAX 16
@@ -11,10 +14,15 @@
 typedef struct cmdline {
         char *cmd;
         char *args[ARG_MAX + 2];
+        int numArgs;
+        // bool outRedirect;
+        // char *outputFile;
 } cmdline;
 
+void cleanup(cmdline c);
+
 int main(void) {
-        cmdline c;
+        cmdline c = {.numArgs = 0}; // cmdline c = {.outRedirect = false};
         char cmdline[CMDLINE_MAX];
 
         while (1) {
@@ -40,27 +48,22 @@ int main(void) {
                         *nl = '\0';
 
                 /* Parse command line */
-                /* Get command */
-                char *token;
-                char buffer[CMDLINE_MAX];
-                int i = 0;
-
-                /* Create a buffer for strtok() to avoid modifying original string */
-                strcpy(buffer, cmdline);
-                
-                token = strtok(buffer, " ");
-                if (token != NULL) {
-                        c.args[i++] = token;
-                        c.cmd = token;
-                        token = strtok(NULL, " ");
+                int argsIndx = -1;
+                char prevChar = ' ';
+                for (size_t i = 0; i < strlen(cmdline); i++) {
+                        char ch = cmdline[i];
+                        if (!isspace(ch)) {
+                                if (isspace(prevChar)) {
+                                        c.args[++argsIndx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                        c.numArgs++;
+                                        if (argsIndx == 0) c.cmd = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                }
+                                strncat(c.args[argsIndx], &ch, 1);
+                                if (argsIndx == 0) strncat(c.cmd, &ch, 1);
+                        }
+                        prevChar = ch;                                                                                                                                                                                       
                 }
-
-                /* Get all arguments */
-                while (token != NULL) {
-                        c.args[i++] = token;
-                        token = strtok(NULL, " ");
-                }
-                c.args[i] = NULL;
+                c.args[++argsIndx] = NULL;
 
                 /* Builtin command */
                 if (!strcmp(c.cmd, "exit")) {
@@ -98,6 +101,16 @@ int main(void) {
                      exit(1);   
                 }
                 fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                cleanup(c);
         }
+        cleanup(c);
         return EXIT_SUCCESS;
+}
+
+/* De-allocate memory */
+void cleanup(cmdline c) {
+        for (int i = 0; i < c.numArgs; i++) {
+                free(c.args[i]);
+        }
+        free(c.cmd);
 }
