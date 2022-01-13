@@ -15,7 +15,7 @@ typedef struct cmdline {
 
 int main(void) {
         cmdline c;
-        char cmdline[CMDLINE_MAX];
+        char cmdline[CMDLINE_MAX + 1];
         char *exec_args[ARG_MAX + 2];
 
         while (1) {
@@ -43,12 +43,18 @@ int main(void) {
                 /* Parse command line */
                 /* Get command */
                 char *token;
+                char buffer[CMDLINE_MAX + 1];
                 int i = 0;
-                token = strtok(cmdline, " ");
+
+                /* Create a buffer for strtok() to avoid modifying original string */
+                strcpy(buffer, cmdline);
+                
+                token = strtok(buffer, " ");
                 if (token != NULL) {
                         c.cmd = exec_args[i++] = token;
                         token = strtok(NULL, " ");
                 }
+
                 /* Get all arguments */
                 while (token != NULL) {
                         exec_args[i++] = token;
