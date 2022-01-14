@@ -15,9 +15,9 @@
 typedef struct cmdline {
         char *cmd;
         char *args[ARG_MAX + 2];
-        int numArgs;
-        bool hasRedirection;
-        char *outputFileName;
+        int num_args;
+        bool has_redirection;
+        char *output_file;
 } cmdline;
 
 void cleanup(cmdline c);
@@ -51,36 +51,32 @@ int main(void) {
                 /* Parse command line */
                 // Reset struct members to avoid double free when deallocating memory
                 c.cmd = NULL;
-                c.numArgs = 0;
-                c.hasRedirection = false;
-                c.outputFileName = NULL;
-                int argsIndx = -1;
-                char prevChar = ' ';
+                c.num_args = 0;
+                c.has_redirection = false;
+                c.output_file = NULL;
+                int args_indx = -1;
+                char prev_char = ' ';
                 for (size_t i = 0; i < strlen(cmdline); i++) {
                         char ch = cmdline[i];
                         if (ch == '>') {
-                                c.hasRedirection = true;
-                        }
-                        else if (c.hasRedirection && !isspace(ch)) { // if redirection symbol read in, the rest of the command line should refer to output file
-                                if (prevChar == '>' || isspace(prevChar)) {
-                                        c.outputFileName = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                c.has_redirection = true;
+                        } else if (c.has_redirection && !isspace(ch)) { // if redirection symbol read in, the rest of the command line should refer to output file
+                                if (prev_char == '>' || isspace(prev_char)) {
+                                        c.output_file = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 }
-                                strncat(c.outputFileName, &ch, 1);
-                        }
-                        else if (!isspace(ch)) { // if no redirection symbol, tokens are the command or arguments
-                                if (isspace(prevChar)) {
-                                        c.args[++argsIndx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                        c.numArgs++;
-                                        if (argsIndx == 0) c.cmd = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                strncat(c.output_file, &ch, 1);
+                        } else if (!isspace(ch)) { // if no redirection symbol, tokens are the command or arguments
+                                if (isspace(prev_char)) {
+                                        c.args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                        c.num_args++;
+                                        if (args_indx == 0) c.cmd = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 }
-                                strncat(c.args[argsIndx], &ch, 1);
-                                if (argsIndx == 0) strncat(c.cmd, &ch, 1);
+                                strncat(c.args[args_indx], &ch, 1);
+                                if (args_indx == 0) strncat(c.cmd, &ch, 1);
                         }
-                        prevChar = ch;                                                                                                                                                                                   
+                        prev_char = ch;                     
                 }
-                c.args[++argsIndx] = NULL;
-
-
+                c.args[++args_indx] = NULL;
 
                 /* Builtin command */
                 if (!strcmp(c.cmd, "exit")) {
@@ -106,13 +102,13 @@ int main(void) {
                 int pid = fork();
                 if (pid == 0) { /* The shell creates a child process */
                         /* The child process runs the command line */
-                        if (c.hasRedirection) {
-                                int fd = open(c.outputFileName, O_RDWR | O_CREAT, 0644);
+                        if (c.has_redirection) {
+                                int fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                                 dup2(fd, STDOUT_FILENO);
                                 close(fd);
                         }
                         execvp(c.cmd, c.args);
-                        perror("execvp");
+                        fprintf(stderr, "Error: command not found\n");
                         exit(1);
                 } else if (pid > 0) {
                         /* The parent process (the shell) waits for the child process's completion & collects its exit status */
@@ -131,9 +127,9 @@ int main(void) {
 
 /* De-allocate memory */
 void cleanup(cmdline c) {
-        for (int i = 0; i < c.numArgs; i++) {
+        for (int i = 0; i < c.num_args; i++) {
                 free(c.args[i]);
         }
         if (c.cmd) free(c.cmd);
-        if (c.outputFileName) free(c.outputFileName);
+        if (c.output_file) free(c.output_file);
 }
