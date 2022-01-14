@@ -49,6 +49,7 @@ int main(void) {
                         *nl = '\0';
 
                 /* Parse command line */
+                // Reset struct members to avoid double free when deallocating memory
                 c.cmd = NULL;
                 c.numArgs = 0;
                 c.hasRedirection = false;
@@ -60,13 +61,13 @@ int main(void) {
                         if (ch == '>') {
                                 c.hasRedirection = true;
                         }
-                        else if (c.hasRedirection && !isspace(ch)) {
+                        else if (c.hasRedirection && !isspace(ch)) { // if redirection symbol read in, the rest of the command line should refer to output file
                                 if (prevChar == '>' || isspace(prevChar)) {
                                         c.outputFileName = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 }
                                 strncat(c.outputFileName, &ch, 1);
                         }
-                        else if (!isspace(ch)) {
+                        else if (!isspace(ch)) { // if no redirection symbol, tokens are the command or arguments
                                 if (isspace(prevChar)) {
                                         c.args[++argsIndx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         c.numArgs++;
