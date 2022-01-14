@@ -72,6 +72,7 @@ int main(void) {
                                 args_indx = -1;
                                 c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 c.cmd[cmd_indx].num_args++;
+                                strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
                         } else if (ch == '>') {
                                 c.has_redirection = true;
                         } else if (c.has_redirection && !isspace(ch)) { // if redirection symbol read in, the rest of the command line should refer to output file
@@ -93,7 +94,7 @@ int main(void) {
                         }
                         prev_char = ch;                     
                 }
-                for (int i = 0; i < 4; i ++) {
+                for (int i = 0; i <= cmd_indx; i ++) {
                         c.cmd[i].args[++args_indx] = NULL;
                 }
 
