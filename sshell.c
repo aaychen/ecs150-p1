@@ -56,22 +56,24 @@ int main(void) {
                 for (int i = 0; i < 4; i ++) {
                         c.cmd[i].num_args = 0;
                 }
-                // c.cmd = NULL;
-                // c.num_args = 0;
                 c.has_redirection = false;
                 c.output_file = NULL;
+
                 int args_indx = -1;
                 int cmd_indx = -1;
-                char prev_char = ' ';
                 int num_pipe = -1;
+                char prev_char = ' ';
                 for (size_t i = 0; i < strlen(cmdline); i++) {
                         char ch = cmdline[i];
                         if (ch == '|') {
                                 num_pipe++;
                         } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read, so new command
+                                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for previous command
+                                // new command
                                 args_indx = -1;
                                 c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 c.cmd[cmd_indx].num_args++;
+
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
                         } else if (ch == '>') {
                                 c.has_redirection = true;
@@ -84,19 +86,16 @@ int main(void) {
                                 if (cmd_indx == -1) { // first command
                                         c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         c.cmd[cmd_indx].num_args++;
-                                        // if (args_indx == 0) c.cmd = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 } else if (isspace(prev_char)) { // arguments
                                         c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         c.cmd[cmd_indx].num_args++;
                                 }
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
-                                // if (args_indx == 0) strncat(c.cmd, &ch, 1);
                         }
                         prev_char = ch;                     
                 }
-                for (int i = 0; i <= cmd_indx; i ++) {
-                        c.cmd[i].args[++args_indx] = NULL;
-                }
+                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for last command
+                
 
                 /* Builtin command */
                 if (!strcmp(c.cmd[0].args[0], "exit")) {
@@ -114,6 +113,57 @@ int main(void) {
                                 retval = 1;
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        continue;
+                }
+
+                // Pipeline commands
+                if (cmd_indx > 0) {
+                        int status;
+                        int retval[cmd_indx];
+                        int fd[2];
+                        int prev_read_pipe = STDIN_FILENO;
+                        for (int i = 0; i < cmd_indx; i++) {
+                                pipe(fd);
+                                if (!fork()) { // Child process
+                                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
+                                                dup2(prev_read_pipe, STDIN_FILENO);
+                                                close(prev_read_pipe);
+                                        }
+
+                                        close(fd[0]);
+                                        dup2(fd[1], STDOUT_FILENO);
+                                        close(fd[1]);
+                                        execvp(c.cmd[i].args[0], c.cmd[i].args);
+                                        fprintf(stderr, "Error: command not found\n");
+                                        exit(1);
+                                } else { // Parent process
+                                        waitpid(-1, &status, 0);
+                                        retval[i] = WEXITSTATUS(status);
+                                        close(fd[1]);
+                                        prev_read_pipe = fd[0];
+                                }
+                        }
+                        pipe(fd); // last command
+                        if (!fork()) {
+                                dup2(prev_read_pipe, STDIN_FILENO);
+                                close(prev_read_pipe);
+                                close(fd[0]);
+                                close(fd[1]);
+                                execvp(c.cmd[cmd_indx].args[0], c.cmd[cmd_indx].args);
+                                fprintf(stderr, "Error: command not found\n");
+                                exit(1);
+                        } else {
+                                close(fd[0]);
+                                close(fd[1]);
+                        }
+                        waitpid(-1, &status, 0);
+                        retval[cmd_indx] = WEXITSTATUS(status);
+                        fprintf(stderr, "+ completed '%s' ", cmdline);
+                        for (int i = 0; i <= cmd_indx; i++) {
+                                fprintf(stderr, "[%d]", retval[i]);
+                                cleanup(c.cmd[i]);
+                        }
+                        fprintf(stderr, "\n");
                         continue;
                 }
 
@@ -140,12 +190,11 @@ int main(void) {
                 }
                 fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
 
-                for (int i = 0; i < cmd_indx; i++) {
+                for (int i = 0; i <= cmd_indx; i++) {
                         cleanup(c.cmd[i]);
                 }
                 if (c.output_file) free(c.output_file);
         }
-        // cleanup(c);
         return EXIT_SUCCESS;
 }
 
