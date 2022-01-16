@@ -118,49 +118,51 @@ int main(void) {
 
                 // Pipeline commands
                 if (cmd_indx > 0) {
-                        int status;
-                        int retval[cmd_indx];
+                        int child_pid;
+                        int children_pid[cmd_indx];
+                        int children_exit[cmd_indx];
                         int fd[2];
                         int prev_read_pipe = STDIN_FILENO;
-                        for (int i = 0; i < cmd_indx; i++) {
+                        for (int i = 0; i <= cmd_indx; i++) {
                                 pipe(fd);
-                                if (!fork()) { // Child process
+                                child_pid = fork();
+                                if (child_pid == 0) { // Child process
                                         if (prev_read_pipe != STDIN_FILENO) { // if not first command
                                                 dup2(prev_read_pipe, STDIN_FILENO);
                                                 close(prev_read_pipe);
                                         }
 
                                         close(fd[0]);
-                                        dup2(fd[1], STDOUT_FILENO);
+                                        if (i != cmd_indx) { // if not last command
+                                                dup2(fd[1], STDOUT_FILENO);
+                                        }
                                         close(fd[1]);
                                         execvp(c.cmd[i].args[0], c.cmd[i].args);
                                         fprintf(stderr, "Error: command not found\n");
                                         exit(1);
-                                } else { // Parent process
-                                        waitpid(-1, &status, 0);
-                                        retval[i] = WEXITSTATUS(status);
+                                } else if (child_pid > 0) { // Parent process
+                                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
+                                                close(prev_read_pipe);
+                                        }
                                         close(fd[1]);
                                         prev_read_pipe = fd[0];
+                                        children_pid[i] = child_pid;
+                                } else {
+                                        perror("fork");
+                                        exit(1);   
                                 }
                         }
-                        pipe(fd); // last command
-                        if (!fork()) {
-                                dup2(prev_read_pipe, STDIN_FILENO);
-                                close(prev_read_pipe);
-                                close(fd[0]);
-                                close(fd[1]);
-                                execvp(c.cmd[cmd_indx].args[0], c.cmd[cmd_indx].args);
-                                fprintf(stderr, "Error: command not found\n");
-                                exit(1);
-                        } else {
-                                close(fd[0]);
-                                close(fd[1]);
+                        close(fd[0]);
+                        for (int i = 0; i <= cmd_indx; i++) {
+                                int status;
+
+                                child_pid = children_pid[i];
+                                waitpid(child_pid, &status, 0);
+                                children_exit[i] = WEXITSTATUS(status);
                         }
-                        waitpid(-1, &status, 0);
-                        retval[cmd_indx] = WEXITSTATUS(status);
                         fprintf(stderr, "+ completed '%s' ", cmdline);
                         for (int i = 0; i <= cmd_indx; i++) {
-                                fprintf(stderr, "[%d]", retval[i]);
+                                fprintf(stderr, "[%d]", children_exit[i]);
                                 cleanup(c.cmd[i]);
                         }
                         fprintf(stderr, "\n");
