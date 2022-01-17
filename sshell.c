@@ -137,15 +137,20 @@ int main(void) {
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
                         DIR *dir_stream = opendir(".");
-                        struct dirent *item;
-                        struct stat item_stat;
-                        while ((item = readdir(dir_stream)) != NULL) {
-                                if (item->d_name && item->d_name[0] != '.') { // ignore hidden file entries
-                                        stat(item->d_name, &item_stat);
-                                        fprintf(stdout, "%s (%lld bytes)\n", item->d_name, (long long) item_stat.st_size);
+                        if (dir_stream == NULL) {
+                                fprintf(stderr, "Error: cannot open directory\n");
+                                retval = 1;
+                        } else {
+                                struct dirent *item;
+                                struct stat item_stat;
+                                while ((item = readdir(dir_stream)) != NULL) {
+                                        if (item->d_name && item->d_name[0] != '.') { // ignore hidden file entries
+                                                stat(item->d_name, &item_stat);
+                                                fprintf(stdout, "%s (%lld bytes)\n", item->d_name, (long long) item_stat.st_size);
+                                        }
                                 }
+                                closedir(dir_stream);
                         }
-                        closedir(dir_stream);
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         // cleanup();
                         continue;
