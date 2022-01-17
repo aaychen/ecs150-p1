@@ -6,11 +6,13 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <fcntl.h>
-
+#include <dirent.h>
+#include <sys/stat.h>
 
 #define CMDLINE_MAX 512
 #define ARG_MAX 16
 #define TOKEN_LEN_MAX 32
+#define NUM_CMDS_MAX 4
 
 typedef struct cmd {
         char *args[ARG_MAX + 2];
@@ -20,10 +22,16 @@ typedef struct cmd {
 typedef struct cmdline {
         cmd cmd[4];
         bool has_redirection;
+        bool error_redirection;
         char *output_file;
 } cmdline;
 
-void cleanup(cmd c);
+/* De-allocate memory */
+void cleanup(cmd cmd) {
+        for (int i = 0; i < cmd.num_args; i++) {
+                free(cmd.args[i]);
+        }
+}
 
 int main(void) {
         cmdline c;
@@ -53,10 +61,11 @@ int main(void) {
 
                 /* Parse command line */
                 // Reset struct members to avoid double free when deallocating memory
-                for (int i = 0; i < 4; i ++) {
+                for (int i = 0; i < NUM_CMDS_MAX; i ++) {
                         c.cmd[i].num_args = 0;
                 }
                 c.has_redirection = false;
+                c.error_redirection = false;
                 c.output_file = NULL;
 
                 int args_indx = -1;
@@ -103,9 +112,10 @@ int main(void) {
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         break;
                 } else if (!strcmp(c.cmd[0].args[0], "pwd")) {
-                        char *path = getcwd(NULL, 0);
-                        fprintf(stdout, "%s\n", path);
+                        char *dir_path = getcwd(NULL, 0);
+                        fprintf(stdout, "%s\n", dir_path);
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        // cleanup();
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "cd")) {
                         if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
@@ -113,6 +123,21 @@ int main(void) {
                                 retval = 1;
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        // cleanup();
+                        continue;
+                } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
+                        DIR *dir_stream = opendir(".");
+                        struct dirent *item;
+                        struct stat item_stat;
+                        while ((item = readdir(dir_stream)) != NULL) {
+                                if (item->d_name && item->d_name[0] != '.') { // ignore hidden file entries
+                                        stat(item->d_name, &item_stat);
+                                        fprintf(stdout, "%s (%ld bytes)\n", item->d_name, item_stat.st_size);
+                                }
+                        }
+                        closedir(dir_stream);
+                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        // cleanup();
                         continue;
                 }
 
@@ -197,12 +222,6 @@ int main(void) {
                 }
                 if (c.output_file) free(c.output_file);
         }
+        // cleanup();
         return EXIT_SUCCESS;
-}
-
-/* De-allocate memory */
-void cleanup(cmd cmd) {
-        for (int i = 0; i < cmd.num_args; i++) {
-                free(cmd.args[i]);
-        }
 }
