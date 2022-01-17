@@ -161,15 +161,16 @@ int main(void) {
                                 pipe(fd);
                                 child_pid = fork();
                                 if (child_pid == 0) { // Child process
-                                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
-                                                dup2(prev_read_pipe, STDIN_FILENO);
-                                                close(prev_read_pipe);
-                                        }
-
-                                        close(fd[0]);
+                                        dup2(prev_read_pipe, STDIN_FILENO);
+                                        close(prev_read_pipe);
                                         if (i != cmd_indx) { // if not last command
                                                 dup2(fd[1], STDOUT_FILENO);
                                                 if (c.error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
+                                        } else if (c.has_redirection) {
+                                                int outfile_fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                                dup2(outfile_fd, STDOUT_FILENO);
+                                                if (c.error_to_file) dup2(outfile_fd, STDERR_FILENO);
+                                                close(outfile_fd);
                                         }
                                         close(fd[1]);
                                         execvp(c.cmd[i].args[0], c.cmd[i].args);
