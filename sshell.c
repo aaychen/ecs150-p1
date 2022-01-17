@@ -13,6 +13,7 @@
 #define ARG_MAX 16
 #define TOKEN_LEN_MAX 32
 #define NUM_CMDS_MAX 4
+#define NUM_PIPES_MAX 3
 
 typedef struct cmd {
         char *args[ARG_MAX + 2];
@@ -22,7 +23,8 @@ typedef struct cmd {
 typedef struct cmdline {
         cmd cmd[4];
         bool has_redirection;
-        bool error_redirection;
+        bool error_to_file;
+        bool error_to_pipe[NUM_PIPES_MAX];
         char *output_file;
 } cmdline;
 
@@ -61,11 +63,14 @@ int main(void) {
 
                 /* Parse command line */
                 // Reset struct members to avoid double free when deallocating memory
-                for (int i = 0; i < NUM_CMDS_MAX; i ++) {
+                for (int i = 0; i < NUM_CMDS_MAX; i++) {
                         c.cmd[i].num_args = 0;
                 }
+                for (int i = 0; i < NUM_PIPES_MAX; i++) {
+                        c.error_to_pipe[i] = false;
+                }
                 c.has_redirection = false;
-                c.error_redirection = false;
+                c.error_to_file = false;
                 c.output_file = NULL;
 
                 int args_indx = -1;
@@ -74,7 +79,13 @@ int main(void) {
                 char prev_char = ' ';
                 for (size_t i = 0; i < strlen(cmdline); i++) {
                         char ch = cmdline[i];
-                        if (ch == '|') {
+                        if (ch == '>') {
+                                c.has_redirection = true;
+                        } else if (prev_char == '>' && ch == '&') {
+                                c.error_to_file = true;
+                        } else if (prev_char == '|' && ch == '&') {
+                                c.error_to_pipe[num_pipe] = true;
+                        } else if (ch == '|') {
                                 num_pipe++;
                         } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read, so new command
                                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for previous command
@@ -84,8 +95,6 @@ int main(void) {
                                 c.cmd[cmd_indx].num_args++;
 
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
-                        } else if (ch == '>') {
-                                c.has_redirection = true;
                         } else if (c.has_redirection && !isspace(ch)) { // if redirection symbol read in, the rest of the command line should refer to output file
                                 if (prev_char == '>' || isspace(prev_char)) {
                                         c.output_file = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
@@ -132,7 +141,7 @@ int main(void) {
                         while ((item = readdir(dir_stream)) != NULL) {
                                 if (item->d_name && item->d_name[0] != '.') { // ignore hidden file entries
                                         stat(item->d_name, &item_stat);
-                                        fprintf(stdout, "%s (%ld bytes)\n", item->d_name, item_stat.st_size);
+                                        fprintf(stdout, "%s (%lld bytes)\n", item->d_name, (long long) item_stat.st_size);
                                 }
                         }
                         closedir(dir_stream);
@@ -160,6 +169,7 @@ int main(void) {
                                         close(fd[0]);
                                         if (i != cmd_indx) { // if not last command
                                                 dup2(fd[1], STDOUT_FILENO);
+                                                if (c.error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
                                         }
                                         close(fd[1]);
                                         execvp(c.cmd[i].args[0], c.cmd[i].args);
@@ -202,6 +212,7 @@ int main(void) {
                         if (c.has_redirection) {
                                 int fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                                 dup2(fd, STDOUT_FILENO);
+                                if (c.error_to_file) dup2(fd, STDERR_FILENO);
                                 close(fd);
                         }
                         execvp(c.cmd[cmd_indx].args[0], c.cmd[cmd_indx].args);
