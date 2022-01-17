@@ -150,8 +150,8 @@ int main(void) {
                         continue;
                 }
 
-                // Pipeline commands
-                if (cmd_indx > 0) {
+                // Pipeline commands (regular commands)
+                if (cmd_indx >= 0) {
                         int child_pid;
                         int children_pid[cmd_indx];
                         int children_exit[cmd_indx];
@@ -202,35 +202,7 @@ int main(void) {
                                 cleanup(c.cmd[i]);
                         }
                         fprintf(stderr, "\n");
-                        continue;
-                }
-
-                /* Regular command */
-                int status;
-                int pid = fork();
-                if (pid == 0) { /* The shell creates a child process */
-                        /* The child process runs the command line */
-                        if (c.has_redirection) {
-                                int fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                                dup2(fd, STDOUT_FILENO);
-                                if (c.error_to_file) dup2(fd, STDERR_FILENO);
-                                close(fd);
-                        }
-                        execvp(c.cmd[cmd_indx].args[0], c.cmd[cmd_indx].args);
-                        fprintf(stderr, "Error: command not found\n");
-                        exit(1);
-                } else if (pid > 0) {
-                        /* The parent process (the shell) waits for the child process's completion & collects its exit status */
-                        waitpid(-1, &status, 0);
-                        retval = WEXITSTATUS(status);
-                } else {
-                     perror("fork");
-                     exit(1);   
-                }
-                fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-
-                for (int i = 0; i <= cmd_indx; i++) {
-                        cleanup(c.cmd[i]);
+                        // continue;
                 }
                 if (c.output_file) free(c.output_file);
         }
