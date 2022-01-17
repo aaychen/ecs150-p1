@@ -62,6 +62,7 @@ int main(void) {
                         *nl = '\0';
 
                 /* Parse command line */
+                if (strlen(cmdline) == 0) continue; // handle empty command line
                 // Reset struct members to avoid double free when deallocating memory
                 for (int i = 0; i < NUM_CMDS_MAX; i++) {
                         c.cmd[i].num_args = 0;
