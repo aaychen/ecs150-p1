@@ -129,7 +129,7 @@ int main(void) {
                                 fprintf(stderr, "Error: no output file\n");
                         } else {
                                 int fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                                if (fd == -1 && errno == EACCES) { // if can't 
+                                if (fd == -1 && errno == EACCES) { // if no permission to open file
                                         parse_error = true;
                                         fprintf(stderr, "Error: cannot open output file\n");
                                 } else if (fd == 0) {
