@@ -95,20 +95,19 @@ int main(void) {
                                         break;
                                 }
                                 num_pipe++;
-                        } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read, so new command
-                                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for previous command
-                                // new command
+                        } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read in -> new command
+                                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of previous command
+                                // New command
                                 args_indx = -1;
                                 c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 c.cmd[cmd_indx].num_args++;
-
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
-                        } else if (c.has_redirection && !isspace(ch)) { // if redirection symbol read in, the rest of the command line should refer to output file
+                        } else if (c.has_redirection && !isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
                                 if (prev_char == '>' || isspace(prev_char)) {
                                         c.output_file = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 }
                                 strncat(c.output_file, &ch, 1);
-                        } else if (!isspace(ch)) { // tokens are command or arguments
+                        } else if (!isspace(ch)) { // tokens are either first command or arguments
                                 if (cmd_indx == -1) cmd_indx++;
                                 if (isspace(prev_char)) {
                                         c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
@@ -144,7 +143,7 @@ int main(void) {
                         // cleanup();
                         continue;
                 }
-                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for last command
+                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of last command
                 
 
                 /* Builtin command */
@@ -187,7 +186,7 @@ int main(void) {
                         continue;
                 }
 
-                // Pipeline commands (regular commands)
+                /* Pipeline commands (regular commands) */
                 if (cmd_indx >= 0) {
                         int child_pid;
                         int children_pid[cmd_indx];
@@ -197,7 +196,7 @@ int main(void) {
                         for (int i = 0; i <= cmd_indx; i++) {
                                 pipe(fd);
                                 child_pid = fork();
-                                if (child_pid == 0) { // Child process
+                                if (child_pid == 0) { // child process
                                         dup2(prev_read_pipe, STDIN_FILENO);
                                         close(prev_read_pipe);
                                         if (i != cmd_indx) { // if not last command
@@ -214,7 +213,7 @@ int main(void) {
                                         execvp(c.cmd[i].args[0], c.cmd[i].args);
                                         fprintf(stderr, "Error: command not found\n");
                                         exit(1);
-                                } else if (child_pid > 0) { // Parent process
+                                } else if (child_pid > 0) { // parent process
                                         if (prev_read_pipe != STDIN_FILENO) { // if not first command
                                                 close(prev_read_pipe);
                                         }
@@ -229,7 +228,6 @@ int main(void) {
                         close(fd[0]);
                         for (int i = 0; i <= cmd_indx; i++) {
                                 int status;
-
                                 child_pid = children_pid[i];
                                 waitpid(child_pid, &status, 0);
                                 children_exit[i] = WEXITSTATUS(status);
