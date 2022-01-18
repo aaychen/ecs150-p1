@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #define CMDLINE_MAX 512
 #define ARG_MAX 16
@@ -122,9 +123,19 @@ int main(void) {
                         }
                         prev_char = ch;                     
                 }
-                if (c.has_redirection && c.output_file == NULL) { // check if output file given
-                        parse_error = true;
-                        fprintf(stderr, "Error: no output file\n");
+                if (c.has_redirection) { // check output file
+                        if (c.output_file == NULL) { // if no output file given
+                                parse_error = true;
+                                fprintf(stderr, "Error: no output file\n");
+                        } else {
+                                int fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                if (fd == -1 && errno == EACCES) { // if can't 
+                                        parse_error = true;
+                                        fprintf(stderr, "Error: cannot open output file\n");
+                                } else if (fd == 0) {
+                                        close(fd);
+                                }
+                        }
                 }
                 if (parse_error) {
                         for (int i = 0; i <= cmd_indx; i++) {
