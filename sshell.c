@@ -88,7 +88,7 @@ int main(void) {
                         } else if (prev_char == '|' && ch == '&') {
                                 c.error_to_pipe[num_pipe] = true;
                         } else if (ch == '|') {
-                                if (c.has_redirection) {
+                                if (c.has_redirection) { // check redirection location
                                         parse_error = true;
                                         fprintf(stderr, "Error: mislocated output redirection\n");
                                         break;
@@ -121,6 +121,10 @@ int main(void) {
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
                         }
                         prev_char = ch;                     
+                }
+                if (c.has_redirection && c.output_file == NULL) { // check if output file given
+                        parse_error = true;
+                        fprintf(stderr, "Error: no output file\n");
                 }
                 if (parse_error) {
                         for (int i = 0; i <= cmd_indx; i++) {
