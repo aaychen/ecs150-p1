@@ -78,6 +78,7 @@ int main(void) {
                 int cmd_indx = -1;
                 int num_pipe = -1;
                 char prev_char = ' ';
+                bool parse_error = false;
                 for (size_t i = 0; i < strlen(cmdline); i++) {
                         char ch = cmdline[i];
                         if (ch == '>') {
@@ -102,16 +103,26 @@ int main(void) {
                                 }
                                 strncat(c.output_file, &ch, 1);
                         } else if (!isspace(ch)) { // tokens are command or arguments
-                                if (cmd_indx == -1) { // first command
-                                        c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                        c.cmd[cmd_indx].num_args++;
-                                } else if (isspace(prev_char)) { // arguments
+                                if (cmd_indx == -1) cmd_indx++;
+                                if (isspace(prev_char)) {
                                         c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         c.cmd[cmd_indx].num_args++;
+                                } 
+                                if (c.cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
+                                        fprintf(stderr, "Error: too many process arguments\n");
+                                        parse_error = true;
+                                        break;
                                 }
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
                         }
                         prev_char = ch;                     
+                }
+                if (parse_error) {
+                        for (int i = 0; i <= cmd_indx; i++) {
+                                cleanup(c.cmd[i]);
+                        }
+                        // cleanup();
+                        continue;
                 }
                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for last command
                 
