@@ -95,6 +95,11 @@ int main(void) {
                                         break;
                                 }
                                 num_pipe++;
+                                if (num_pipe > cmd_indx) {
+                                        parse_error = true;
+                                        fprintf(stderr, "Error: missing command\n");
+                                        break;
+                                }
                         } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read in -> new command
                                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of previous command
                                 // New command
@@ -103,6 +108,11 @@ int main(void) {
                                 c.cmd[cmd_indx].num_args++;
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
                         } else if (c.has_redirection && !isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
+                                if (cmd_indx == -1) {
+                                        parse_error = true;
+                                        fprintf(stderr, "Error: missing command\n");
+                                        break;
+                                }
                                 if (prev_char == '>' || isspace(prev_char)) {
                                         c.output_file = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 }
@@ -122,7 +132,11 @@ int main(void) {
                         }
                         prev_char = ch;                     
                 }
-                if (c.has_redirection) { // check output file
+                if (num_pipe == cmd_indx && !parse_error) {
+                        parse_error = true;
+                        fprintf(stderr, "Error: missing command\n");
+                }
+                if (c.has_redirection && !parse_error) { // check output file
                         if (c.output_file == NULL) { // if no output file given
                                 parse_error = true;
                                 fprintf(stderr, "Error: no output file\n");
@@ -197,8 +211,10 @@ int main(void) {
                                 pipe(fd);
                                 child_pid = fork();
                                 if (child_pid == 0) { // child process
-                                        dup2(prev_read_pipe, STDIN_FILENO);
-                                        close(prev_read_pipe);
+                                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
+                                                dup2(prev_read_pipe, STDIN_FILENO);
+                                                close(prev_read_pipe);
+                                        }
                                         if (i != cmd_indx) { // if not last command
                                                 dup2(fd[1], STDOUT_FILENO);
                                                 if (c.error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
