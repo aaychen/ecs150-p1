@@ -88,6 +88,11 @@ int main(void) {
                         } else if (prev_char == '|' && ch == '&') {
                                 c.error_to_pipe[num_pipe] = true;
                         } else if (ch == '|') {
+                                if (c.has_redirection) {
+                                        parse_error = true;
+                                        fprintf(stderr, "Error: mislocated output redirection\n");
+                                        break;
+                                }
                                 num_pipe++;
                         } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read, so new command
                                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to args list for previous command
@@ -109,8 +114,8 @@ int main(void) {
                                         c.cmd[cmd_indx].num_args++;
                                 } 
                                 if (c.cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
-                                        fprintf(stderr, "Error: too many process arguments\n");
                                         parse_error = true;
+                                        fprintf(stderr, "Error: too many process arguments\n");
                                         break;
                                 }
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
