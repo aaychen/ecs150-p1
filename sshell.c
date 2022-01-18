@@ -26,14 +26,28 @@ typedef struct cmdline {
         bool has_redirection;
         bool error_to_file;
         bool error_to_pipe[NUM_PIPES_MAX];
-        char *output_file;
+        char *outfile;
 } cmdline;
 
-/* De-allocate memory */
+/* De-allocate memory to avoid memory leaks */
 void cleanup(cmd cmd) {
         for (int i = 0; i < cmd.num_args; i++) {
                 free(cmd.args[i]);
         }
+}
+
+/** Handles cannot open output file error. If error occurs, this function will print the error message.
+ *  @param fname the name of the file to check access/permissions for
+ *  @return 0 if no error, 1 if error occurs
+ */
+int check_outfile_access(const char *fname) {
+        int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd == -1 && errno == EACCES) { // if no permission to open file
+                fprintf(stderr, "Error: cannot open output file\n");
+                return 1;
+        }
+        close(fd);
+        return 0;
 }
 
 int main(void) {
@@ -73,7 +87,7 @@ int main(void) {
                 }
                 c.has_redirection = false;
                 c.error_to_file = false;
-                c.output_file = NULL;
+                c.outfile = NULL;
 
                 int args_indx = -1;
                 int cmd_indx = -1;
@@ -91,6 +105,10 @@ int main(void) {
                         } else if (ch == '|') {
                                 if (c.has_redirection) { // check redirection location
                                         parse_error = true;
+                                        if (c.outfile == NULL) { // check if output file given first
+                                                fprintf(stderr, "Error: no output file\n");
+                                                break;
+                                        }
                                         fprintf(stderr, "Error: mislocated output redirection\n");
                                         break;
                                 }
@@ -107,17 +125,23 @@ int main(void) {
                                 c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 c.cmd[cmd_indx].num_args++;
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
-                        } else if (c.has_redirection && !isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
-                                if (cmd_indx == -1) {
+                        } else if (c.has_redirection) {
+                                if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
+                                        if (cmd_indx == -1) {
+                                                parse_error = true;
+                                                fprintf(stderr, "Error: missing command\n");
+                                                break;
+                                        }
+                                        if (prev_char == '>' || isspace(prev_char)) {
+                                                c.outfile = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                                        }
+                                        strncat(c.outfile, &ch, 1);
+                                } else if (c.outfile != NULL && check_outfile_access(c.outfile)){ // check output file permissions
                                         parse_error = true;
-                                        fprintf(stderr, "Error: missing command\n");
                                         break;
                                 }
-                                if (prev_char == '>' || isspace(prev_char)) {
-                                        c.output_file = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                }
-                                strncat(c.output_file, &ch, 1);
-                        } else if (!isspace(ch)) { // tokens are either first command or arguments
+                        }
+                        else if (!isspace(ch)) { // tokens are either first command or arguments
                                 if (cmd_indx == -1) cmd_indx++;
                                 if (isspace(prev_char)) {
                                         c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
@@ -132,22 +156,16 @@ int main(void) {
                         }
                         prev_char = ch;                     
                 }
-                if (num_pipe == cmd_indx && !parse_error) {
+                if (!parse_error && num_pipe == cmd_indx) {
                         parse_error = true;
                         fprintf(stderr, "Error: missing command\n");
                 }
-                if (c.has_redirection && !parse_error) { // check output file
-                        if (c.output_file == NULL) { // if no output file given
+                if (!parse_error && c.has_redirection) { // check output file
+                        if (c.outfile == NULL) { // if no output file given
                                 parse_error = true;
                                 fprintf(stderr, "Error: no output file\n");
-                        } else {
-                                int fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                                if (fd == -1 && errno == EACCES) { // if no permission to open file
-                                        parse_error = true;
-                                        fprintf(stderr, "Error: cannot open output file\n");
-                                } else if (fd == 0) {
-                                        close(fd);
-                                }
+                        } else if (check_outfile_access(c.outfile)){ // check output file permissions
+                                parse_error = true;
                         }
                 }
                 if (parse_error) {
@@ -219,7 +237,7 @@ int main(void) {
                                                 dup2(fd[1], STDOUT_FILENO);
                                                 if (c.error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
                                         } else if (c.has_redirection) { // if have redirection to file
-                                                        int outfile_fd = open(c.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                                        int outfile_fd = open(c.outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                                                         dup2(outfile_fd, STDOUT_FILENO);
                                                         if (c.error_to_file) dup2(outfile_fd, STDERR_FILENO);
                                                         close(outfile_fd);
@@ -256,7 +274,7 @@ int main(void) {
                         fprintf(stderr, "\n");
                         // continue;
                 }
-                if (c.output_file) free(c.output_file);
+                if (c.outfile) free(c.outfile);
         }
         // cleanup();
         return EXIT_SUCCESS;
