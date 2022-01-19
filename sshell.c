@@ -45,7 +45,6 @@ void reset(cmdline *cmdline) {
                 cmdline->error_to_pipe[i] = false;
         }
         cmdline->error_to_file = false;
-        return;
 }
 
 /** De-allocate memory to avoid memory leaks 
@@ -64,10 +63,17 @@ void cleanup(cmdline *cmdline) {
                 free(cmdline->outfile);
                 cmdline->outfile = NULL;
         }
-        return;
 }
 
-/** Handles cannot open output file error. If error occurs, this function will print the error message.
+/** Display parsing error message on stderr
+ *  @param
+ */
+void parsing_error_message(bool *parsing_error, char *error) {
+        *parsing_error = true;
+        fprintf(stderr, "Error: %s\n", error);
+}
+
+/** Handle cannot open output file error. If error occurs, this function will print the error message.
  *  @param fname the name of the file to check access/permissions for
  *  @return 0 if no error, 1 if error occurs
  */
@@ -86,7 +92,6 @@ int has_access_error(const char *fname) {
 void sshell_exit(char *cmdline, int retval) {
         fprintf(stderr, "Bye...\n");
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-        return;
 }
 // pwd()
 void sshell_pwd(char *cmdline, int retval) {
@@ -94,7 +99,6 @@ void sshell_pwd(char *cmdline, int retval) {
         fprintf(stdout, "%s\n", dir_path);
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
         free(dir_path);
-        return;
 }
 // cd()
 void sshell_cd(char *input, cmdline c, int cmd_indx, int retval) {
@@ -103,7 +107,6 @@ void sshell_cd(char *input, cmdline c, int cmd_indx, int retval) {
                 retval = 1;
         }
         fprintf(stderr, "+ completed '%s' [%d]\n", input, retval);
-        return;
 }
 // sls()
 void sls(char *cmdline, int retval) {
@@ -123,9 +126,11 @@ void sls(char *cmdline, int retval) {
                 closedir(dir_stream);
         }
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-        return;
 }
 
+/** Display completion message on stderr with return values of completed commands
+ *  @param
+ */
 void completion_message(char *cmdline, int cmd_indx, int *children_pid, int *children_exit) {
         int child_pid;
         for (int i = 0; i <= cmd_indx; i++) {
@@ -187,18 +192,16 @@ int main(void) {
                                 c.error_to_pipe[num_pipe] = true;
                         } else if (ch == '|') {
                                 if (c.has_redirection) { // check redirection location
-                                        parsing_error = true;
                                         if (c.outfile == NULL) { // check if output file given first
                                                 fprintf(stderr, "Error: no output file\n");
                                                 break;
                                         }
-                                        fprintf(stderr, "Error: mislocated output redirection\n");
+                                        parsing_error_message(&parsing_error, "mislocated output redirection");
                                         break;
                                 }
                                 num_pipe++;
                                 if (num_pipe > cmd_indx) {
-                                        parsing_error = true;
-                                        fprintf(stderr, "Error: missing command\n");
+                                        parsing_error_message(&parsing_error, "missing command");
                                         break;
                                 }
                         } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read in -> new command
@@ -212,8 +215,7 @@ int main(void) {
                         } else if (c.has_redirection) {
                                 if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
                                         if (cmd_indx == -1) {
-                                                parsing_error = true;
-                                                fprintf(stderr, "Error: missing command\n");
+                                                parsing_error_message(&parsing_error, "missing command");
                                                 break;
                                         }
                                         if (prev_char == '>' || isspace(prev_char)) {
@@ -235,8 +237,7 @@ int main(void) {
                                         c.cmd[cmd_indx].num_args++;
                                 } 
                                 if (c.cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
-                                        parsing_error = true;
-                                        fprintf(stderr, "Error: too many process arguments\n");
+                                        parsing_error_message(&parsing_error, "too many process arguments");
                                         break;
                                 }
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
@@ -244,13 +245,11 @@ int main(void) {
                         prev_char = ch;                     
                 }
                 if (!parsing_error && num_pipe == cmd_indx) {
-                        parsing_error = true;
-                        fprintf(stderr, "Error: missing command\n");
+                        parsing_error_message(&parsing_error, "missing command");
                 }
                 if (!parsing_error && c.has_redirection) { // check output file
                         if (c.outfile == NULL) { // if no output file given
-                                parsing_error = true;
-                                fprintf(stderr, "Error: no output file\n");
+                                parsing_error_message(&parsing_error, "no output file");
                         } else if (has_access_error(c.outfile)){ // check output file permissions
                                 parsing_error = true;
                         }
@@ -291,6 +290,10 @@ int main(void) {
                         for (int i = 0; i <= cmd_indx; i++) {
                                 pipe(fd);
                                 child_pid = fork();
+                                if (child_pid < 0) {
+                                        perror("fork");
+                                        exit(1);
+                                }
                                 if (child_pid == 0) { // child process
                                         if (prev_read_pipe != STDIN_FILENO) { // if not first command
                                                 dup2(prev_read_pipe, STDIN_FILENO);
@@ -310,16 +313,13 @@ int main(void) {
                                         execvp(c.cmd[i].args[0], c.cmd[i].args);
                                         fprintf(stderr, "Error: command not found\n");
                                         exit(1);
-                                } else if (child_pid > 0) { // parent process
+                                } else { // parent process
                                         if (prev_read_pipe != STDIN_FILENO) { // if not first command
                                                 close(prev_read_pipe);
                                         }
                                         close(fd[1]);
                                         prev_read_pipe = fd[0];
                                         children_pid[i] = child_pid;
-                                } else {
-                                        perror("fork");
-                                        exit(1);   
                                 }
                         }
                         close(fd[0]);
