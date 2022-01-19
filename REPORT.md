@@ -20,7 +20,7 @@ The program's implementation is divided into two stages:
 
 ### Parsing of the command line
 
-`sshell` receives user input from the terminal and parses it to create a command-line data structure called `struct cmdline` at the start of its execution. This command-line data structure is a single object that holds a variety of information, such as the number of commands entered, whether output redirection is set, the output file's name, and if standard error is forwarded to either a file or another command in a pipeline. Finally, the command-line data structure also includes a data structure called `struct cmd` to represent individual commands. This data structure holds information on each command's arguments and how many there are. Having two data structures allows us to split down the information-dense commandline into manageable parts.
+`sshell` receives user input from the terminal and parses it to create a command-line data structure called `struct cmdline` at the start of its execution. This command-line data structure is a single object that holds a variety of information, such as the number of commands entered, whether output redirection is set, the output file's name, and if standard error is forwarded to either a file or another command in a pipeline. Finally, the command-line data structure also includes a data structure called `struct cmd` to represent individual commands. This data structure holds information on each command's arguments and how many there are. Having two data structures allows us to split down the information-dense command line into manageable parts.
 
 The program iterates through each character of the command line, looking for the information needed to launch it and addressing any parsing problems it encounters.
 
