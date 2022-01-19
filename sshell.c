@@ -51,18 +51,18 @@ void reset(cmdline *cmdline) {
 /** De-allocate memory to avoid memory leaks 
  *  @param cmdline struct cmdline with dynamic memory used
  */
-void cleanup(cmdline cmdline) {
-        for (int i = 0; i < cmdline.num_cmds; i++) {
-                for (int j = 0; j < cmdline.cmd[i].num_args; j++) {
-                        if (cmdline.cmd[i].args[j]) {
-                                free(cmdline.cmd[i].args[j]);
-                                cmdline.cmd[i].args[j] = NULL;
+void cleanup(cmdline *cmdline) {
+        for (int i = 0; i < cmdline->num_cmds; i++) {
+                for (int j = 0; j < cmdline->cmd[i].num_args; j++) {
+                        if (cmdline->cmd[i].args[j]) {
+                                free(cmdline->cmd[i].args[j]);
+                                cmdline->cmd[i].args[j] = NULL;
                         }
                 }
         }
-        if (cmdline.outfile) {
-                free(cmdline.outfile);
-                cmdline.outfile = NULL;
+        if (cmdline->outfile) {
+                free(cmdline->outfile);
+                cmdline->outfile = NULL;
         }
         return;
 }
@@ -110,7 +110,6 @@ int main(void) {
                 /* Parse command line */
                 if (strlen(cmdline) == 0) continue; // empty command line
 
-                // Reset struct members to avoid double free when deallocating memory
                 reset(&c);
 
                 int args_indx = -1;
@@ -118,7 +117,7 @@ int main(void) {
                 int num_pipe = -1;
                 char prev_char = ' ';
                 bool parsing_error = false;
-                for (size_t i = 0; i < strlen(cmdline); i++) {
+                for (size_t i = 0; i < strlen(cmdline); i++) { // iterate through each character of commandline
                         char ch = cmdline[i];
                         if (ch == '>') {
                                 c.has_redirection = true;
@@ -197,7 +196,7 @@ int main(void) {
                         }
                 }
                 if (parsing_error) {
-                        cleanup(c);
+                        cleanup(&c);
                         continue;
                 }
                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of last command
@@ -207,14 +206,14 @@ int main(void) {
                 if (!strcmp(c.cmd[cmd_indx].args[0], "exit")) {
                         fprintf(stderr, "Bye...\n");
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        cleanup(c);
+                        cleanup(&c);
                         break;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "pwd")) {
                         char *dir_path = getcwd(NULL, 0);
                         fprintf(stdout, "%s\n", dir_path);
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
                         free(dir_path);
-                        cleanup(c);
+                        cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "cd")) {
                         if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
@@ -222,7 +221,7 @@ int main(void) {
                                 retval = 1;
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        cleanup(c);
+                        cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
                         DIR *dir_stream = opendir(".");
@@ -241,7 +240,7 @@ int main(void) {
                                 closedir(dir_stream);
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        cleanup(c);
+                        cleanup(&c);
                         continue;
                 }
 
@@ -299,7 +298,7 @@ int main(void) {
                         }
                         fprintf(stderr, "\n");
                 }
-                cleanup(c);
+                cleanup(&c);
         }
         return EXIT_SUCCESS;
 }
