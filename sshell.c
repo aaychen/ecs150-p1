@@ -25,10 +25,28 @@ typedef struct cmdline {
         cmd cmd[NUM_CMDS_MAX];
         int num_cmds;
         bool has_redirection;
-        bool error_to_file;
-        bool error_to_pipe[NUM_PIPES_MAX];
         char *outfile;
+        bool error_to_pipe[NUM_PIPES_MAX];
+        bool error_to_file;
 } cmdline;
+
+/** Reset struct members to avoid double free when deallocating memory
+ * @param cmdline struct cmdline with initialized members
+ * 
+ */
+void reset(cmdline *cmdline) {
+        for (int i = 0; i < NUM_CMDS_MAX; i++) {
+                cmdline->cmd[i].num_args = 0;
+        }
+        cmdline->num_cmds = 0;
+        cmdline->has_redirection = false;
+        cmdline->outfile = NULL;
+        for (int i = 0; i < NUM_PIPES_MAX; i++) {
+                cmdline->error_to_pipe[i] = false;
+        }
+        cmdline->error_to_file = false;
+        return;
+}
 
 /** De-allocate memory to avoid memory leaks 
  *  @param cmdline struct cmdline with dynamic memory used
@@ -90,24 +108,16 @@ int main(void) {
                         *nl = '\0';
 
                 /* Parse command line */
-                if (strlen(cmdline) == 0) continue; // handle empty command line
+                if (strlen(cmdline) == 0) continue; // empty command line
+
                 // Reset struct members to avoid double free when deallocating memory
-                for (int i = 0; i < NUM_CMDS_MAX; i++) {
-                        c.cmd[i].num_args = 0;
-                }
-                for (int i = 0; i < NUM_PIPES_MAX; i++) {
-                        c.error_to_pipe[i] = false;
-                }
-                c.num_cmds = 0;
-                c.has_redirection = false;
-                c.error_to_file = false;
-                c.outfile = NULL;
+                reset(&c);
 
                 int args_indx = -1;
                 int cmd_indx = -1;
                 int num_pipe = -1;
                 char prev_char = ' ';
-                bool parse_error = false;
+                bool parsing_error = false;
                 for (size_t i = 0; i < strlen(cmdline); i++) {
                         char ch = cmdline[i];
                         if (ch == '>') {
@@ -118,7 +128,7 @@ int main(void) {
                                 c.error_to_pipe[num_pipe] = true;
                         } else if (ch == '|') {
                                 if (c.has_redirection) { // check redirection location
-                                        parse_error = true;
+                                        parsing_error = true;
                                         if (c.outfile == NULL) { // check if output file given first
                                                 fprintf(stderr, "Error: no output file\n");
                                                 break;
@@ -128,7 +138,7 @@ int main(void) {
                                 }
                                 num_pipe++;
                                 if (num_pipe > cmd_indx) {
-                                        parse_error = true;
+                                        parsing_error = true;
                                         fprintf(stderr, "Error: missing command\n");
                                         break;
                                 }
@@ -143,7 +153,7 @@ int main(void) {
                         } else if (c.has_redirection) {
                                 if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
                                         if (cmd_indx == -1) {
-                                                parse_error = true;
+                                                parsing_error = true;
                                                 fprintf(stderr, "Error: missing command\n");
                                                 break;
                                         }
@@ -152,7 +162,7 @@ int main(void) {
                                         }
                                         strncat(c.outfile, &ch, 1);
                                 } else if (c.outfile != NULL && has_access_error(c.outfile)){ // check output file permissions
-                                        parse_error = true;
+                                        parsing_error = true;
                                         break;
                                 }
                         }
@@ -166,7 +176,7 @@ int main(void) {
                                         c.cmd[cmd_indx].num_args++;
                                 } 
                                 if (c.cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
-                                        parse_error = true;
+                                        parsing_error = true;
                                         fprintf(stderr, "Error: too many process arguments\n");
                                         break;
                                 }
@@ -174,19 +184,19 @@ int main(void) {
                         }
                         prev_char = ch;                     
                 }
-                if (!parse_error && num_pipe == cmd_indx) {
-                        parse_error = true;
+                if (!parsing_error && num_pipe == cmd_indx) {
+                        parsing_error = true;
                         fprintf(stderr, "Error: missing command\n");
                 }
-                if (!parse_error && c.has_redirection) { // check output file
+                if (!parsing_error && c.has_redirection) { // check output file
                         if (c.outfile == NULL) { // if no output file given
-                                parse_error = true;
+                                parsing_error = true;
                                 fprintf(stderr, "Error: no output file\n");
                         } else if (has_access_error(c.outfile)){ // check output file permissions
-                                parse_error = true;
+                                parsing_error = true;
                         }
                 }
-                if (parse_error) {
+                if (parsing_error) {
                         cleanup(c);
                         continue;
                 }
