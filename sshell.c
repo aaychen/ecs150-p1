@@ -70,7 +70,7 @@ void cleanup(cmdline *cmdline) {
  */
 void fail(char *func) {
         perror(func);
-	exit(1); 
+        exit(1); 
 }
 
 /** Display parsing error message on stderr
@@ -218,7 +218,7 @@ int main(void) {
                                 args_indx = -1;
                                 c.num_cmds++;
                                 c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                if (!c.outfile) fail("calloc");
+                                if (!c.cmd[cmd_indx].args[args_indx]) fail("calloc");
                                 c.cmd[cmd_indx].num_args++;
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
                         } else if (c.has_redirection) {
@@ -246,7 +246,7 @@ int main(void) {
 
                                 if (isspace(prev_char)) {
                                         c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                        if (!c.outfile) fail("calloc");
+                                        if (!c.cmd[cmd_indx].args[args_indx]) fail("calloc");
                                         c.cmd[cmd_indx].num_args++;
                                 } 
 
