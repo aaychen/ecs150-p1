@@ -83,21 +83,29 @@ int has_access_error(const char *fname) {
 
 /* Builtin command */
 // exit()
-void sshell_exit(char *cmdline, int *retval) {
+void sshell_exit(char *cmdline, int retval) {
         fprintf(stderr, "Bye...\n");
-        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, *retval);
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
         return;
 }
 // pwd()
-void sshell_pwd(char *cmdline, int *retval) {
+void sshell_pwd(char *cmdline, int retval) {
         char *dir_path = getcwd(NULL, 0);
         fprintf(stdout, "%s\n", dir_path);
-        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, *retval);
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
         free(dir_path);
         return;
 }
-
 // cd()
+void sshell_cd(char *input, cmdline c, int cmd_indx, int retval) {
+        if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
+                fprintf(stderr, "Error: cannot cd into directory\n");
+                retval = 1;
+        }
+        fprintf(stderr, "+ completed '%s' [%d]\n", input, retval);
+        return;
+}
+
 // sls()
 int main(void) {
         cmdline c;
@@ -222,19 +230,15 @@ int main(void) {
 
                 /* Builtin command */
                 if (!strcmp(c.cmd[cmd_indx].args[0], "exit")) {
-                        sshell_exit(cmdline, &retval);
+                        sshell_exit(cmdline, retval);
                         cleanup(&c);
                         break;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "pwd")) {
-                        sshell_pwd(cmdline, &retval);
+                        sshell_pwd(cmdline, retval);
                         cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "cd")) {
-                        if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
-                                fprintf(stderr, "Error: cannot cd into directory\n");
-                                retval = 1;
-                        }
-                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        sshell_cd(cmdline, c, cmd_indx, retval);
                         cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
