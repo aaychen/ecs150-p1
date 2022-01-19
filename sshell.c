@@ -81,6 +81,17 @@ int has_access_error(const char *fname) {
         return 0;
 }
 
+/* Builtin command */
+// exit()
+void sshell_exit(char *cmdline, int *retval) {
+        fprintf(stderr, "Bye...\n");
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, *retval);
+        return;
+}
+// pwd()
+
+// cd()
+// sls()
 int main(void) {
         cmdline c;
         char cmdline[CMDLINE_MAX];
@@ -107,7 +118,7 @@ int main(void) {
                 if (nl)
                         *nl = '\0';
 
-                /* Parse command line */
+                /* Parse command line (will throw errors when encountered incorrect commandline) */
                 if (strlen(cmdline) == 0) continue; // empty command line
 
                 reset(&c);
@@ -204,8 +215,7 @@ int main(void) {
 
                 /* Builtin command */
                 if (!strcmp(c.cmd[cmd_indx].args[0], "exit")) {
-                        fprintf(stderr, "Bye...\n");
-                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        sshell_exit(cmdline, &retval);
                         cleanup(&c);
                         break;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "pwd")) {
