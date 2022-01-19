@@ -126,6 +126,20 @@ void sls(char *cmdline, int retval) {
         return;
 }
 
+void completion_message(char *cmdline, int cmd_indx, int *children_pid, int *children_exit) {
+        int child_pid;
+        for (int i = 0; i <= cmd_indx; i++) {
+                int status;
+                child_pid = children_pid[i];
+                waitpid(child_pid, &status, 0);
+                children_exit[i] = WEXITSTATUS(status);
+        }
+        fprintf(stderr, "+ completed '%s' ", cmdline);
+        for (int i = 0; i <= cmd_indx; i++) {
+                fprintf(stderr, "[%d]", children_exit[i]);
+        }
+        fprintf(stderr, "\n");
+}
 
 int main(void) {
         cmdline c;
@@ -309,17 +323,7 @@ int main(void) {
                                 }
                         }
                         close(fd[0]);
-                        for (int i = 0; i <= cmd_indx; i++) {
-                                int status;
-                                child_pid = children_pid[i];
-                                waitpid(child_pid, &status, 0);
-                                children_exit[i] = WEXITSTATUS(status);
-                        }
-                        fprintf(stderr, "+ completed '%s' ", cmdline);
-                        for (int i = 0; i <= cmd_indx; i++) {
-                                fprintf(stderr, "[%d]", children_exit[i]);
-                        }
-                        fprintf(stderr, "\n");
+                        completion_message(cmdline, cmd_indx, children_pid, children_exit);
                 }
                 cleanup(&c);
         }
