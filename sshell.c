@@ -22,25 +22,38 @@ typedef struct cmd {
 } cmd;
 
 typedef struct cmdline {
-        cmd cmd[4];
+        cmd cmd[NUM_CMDS_MAX];
+        int num_cmds;
         bool has_redirection;
         bool error_to_file;
         bool error_to_pipe[NUM_PIPES_MAX];
         char *outfile;
 } cmdline;
 
-/* De-allocate memory to avoid memory leaks */
-void cleanup(cmd cmd) {
-        for (int i = 0; i < cmd.num_args; i++) {
-                free(cmd.args[i]);
+/** De-allocate memory to avoid memory leaks 
+ *  @param cmdline struct cmdline with dynamic memory used
+ */
+void cleanup(cmdline cmdline) {
+        for (int i = 0; i < cmdline.num_cmds; i++) {
+                for (int j = 0; j < cmdline.cmd[i].num_args; j++) {
+                        if (cmdline.cmd[i].args[j]) {
+                                free(cmdline.cmd[i].args[j]);
+                                cmdline.cmd[i].args[j] = NULL;
+                        }
+                }
         }
+        if (cmdline.outfile) {
+                free(cmdline.outfile);
+                cmdline.outfile = NULL;
+        }
+        return;
 }
 
 /** Handles cannot open output file error. If error occurs, this function will print the error message.
  *  @param fname the name of the file to check access/permissions for
  *  @return 0 if no error, 1 if error occurs
  */
-int check_outfile_access(const char *fname) {
+int has_access_error(const char *fname) {
         int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd == -1 && errno == EACCES) { // if no permission to open file
                 fprintf(stderr, "Error: cannot open output file\n");
@@ -85,6 +98,7 @@ int main(void) {
                 for (int i = 0; i < NUM_PIPES_MAX; i++) {
                         c.error_to_pipe[i] = false;
                 }
+                c.num_cmds = 0;
                 c.has_redirection = false;
                 c.error_to_file = false;
                 c.outfile = NULL;
@@ -122,6 +136,7 @@ int main(void) {
                                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of previous command
                                 // New command
                                 args_indx = -1;
+                                c.num_cmds++;
                                 c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                 c.cmd[cmd_indx].num_args++;
                                 strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
@@ -136,13 +151,16 @@ int main(void) {
                                                 c.outfile = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         }
                                         strncat(c.outfile, &ch, 1);
-                                } else if (c.outfile != NULL && check_outfile_access(c.outfile)){ // check output file permissions
+                                } else if (c.outfile != NULL && has_access_error(c.outfile)){ // check output file permissions
                                         parse_error = true;
                                         break;
                                 }
                         }
                         else if (!isspace(ch)) { // tokens are either first command or arguments
-                                if (cmd_indx == -1) cmd_indx++;
+                                if (cmd_indx == -1) {
+                                        c.num_cmds++;
+                                        cmd_indx++;
+                                }
                                 if (isspace(prev_char)) {
                                         c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
                                         c.cmd[cmd_indx].num_args++;
@@ -164,30 +182,29 @@ int main(void) {
                         if (c.outfile == NULL) { // if no output file given
                                 parse_error = true;
                                 fprintf(stderr, "Error: no output file\n");
-                        } else if (check_outfile_access(c.outfile)){ // check output file permissions
+                        } else if (has_access_error(c.outfile)){ // check output file permissions
                                 parse_error = true;
                         }
                 }
                 if (parse_error) {
-                        for (int i = 0; i <= cmd_indx; i++) {
-                                cleanup(c.cmd[i]);
-                        }
-                        // cleanup();
+                        cleanup(c);
                         continue;
                 }
                 c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of last command
                 
 
                 /* Builtin command */
-                if (!strcmp(c.cmd[0].args[0], "exit")) {
+                if (!strcmp(c.cmd[cmd_indx].args[0], "exit")) {
                         fprintf(stderr, "Bye...\n");
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        cleanup(c);
                         break;
-                } else if (!strcmp(c.cmd[0].args[0], "pwd")) {
+                } else if (!strcmp(c.cmd[cmd_indx].args[0], "pwd")) {
                         char *dir_path = getcwd(NULL, 0);
                         fprintf(stdout, "%s\n", dir_path);
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        // cleanup();
+                        free(dir_path);
+                        cleanup(c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "cd")) {
                         if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
@@ -195,7 +212,7 @@ int main(void) {
                                 retval = 1;
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        // cleanup();
+                        cleanup(c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
                         DIR *dir_stream = opendir(".");
@@ -214,7 +231,7 @@ int main(void) {
                                 closedir(dir_stream);
                         }
                         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        // cleanup();
+                        cleanup(c);
                         continue;
                 }
 
@@ -269,13 +286,10 @@ int main(void) {
                         fprintf(stderr, "+ completed '%s' ", cmdline);
                         for (int i = 0; i <= cmd_indx; i++) {
                                 fprintf(stderr, "[%d]", children_exit[i]);
-                                cleanup(c.cmd[i]);
                         }
                         fprintf(stderr, "\n");
-                        // continue;
                 }
-                if (c.outfile) free(c.outfile);
+                cleanup(c);
         }
-        // cleanup();
         return EXIT_SUCCESS;
 }
