@@ -89,6 +89,13 @@ void sshell_exit(char *cmdline, int *retval) {
         return;
 }
 // pwd()
+void sshell_pwd(char *cmdline, int *retval) {
+        char *dir_path = getcwd(NULL, 0);
+        fprintf(stdout, "%s\n", dir_path);
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, *retval);
+        free(dir_path);
+        return;
+}
 
 // cd()
 // sls()
@@ -219,10 +226,7 @@ int main(void) {
                         cleanup(&c);
                         break;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "pwd")) {
-                        char *dir_path = getcwd(NULL, 0);
-                        fprintf(stdout, "%s\n", dir_path);
-                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
-                        free(dir_path);
+                        sshell_pwd(cmdline, &retval);
                         cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "cd")) {
