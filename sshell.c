@@ -105,8 +105,28 @@ void sshell_cd(char *input, cmdline c, int cmd_indx, int retval) {
         fprintf(stderr, "+ completed '%s' [%d]\n", input, retval);
         return;
 }
-
 // sls()
+void sls(char *cmdline, int retval) {
+        DIR *dir_stream = opendir(".");
+        if (dir_stream == NULL) {
+                fprintf(stderr, "Error: cannot open directory\n");
+                retval = 1;
+        } else {
+                struct dirent *item;
+                struct stat item_stat;
+                while ((item = readdir(dir_stream)) != NULL) {
+                        if (item->d_name && item->d_name[0] != '.') { // ignore hidden file entries
+                        stat(item->d_name, &item_stat);
+                        fprintf(stdout, "%s (%lld bytes)\n", item->d_name, (long long) item_stat.st_size);
+                        }
+                }
+                closedir(dir_stream);
+        }
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+        return;
+}
+
+
 int main(void) {
         cmdline c;
         char cmdline[CMDLINE_MAX];
@@ -242,22 +262,7 @@ int main(void) {
                         cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
-                        DIR *dir_stream = opendir(".");
-                        if (dir_stream == NULL) {
-                                fprintf(stderr, "Error: cannot open directory\n");
-                                retval = 1;
-                        } else {
-                                struct dirent *item;
-                                struct stat item_stat;
-                                while ((item = readdir(dir_stream)) != NULL) {
-                                        if (item->d_name && item->d_name[0] != '.') { // ignore hidden file entries
-                                                stat(item->d_name, &item_stat);
-                                                fprintf(stdout, "%s (%lld bytes)\n", item->d_name, (long long) item_stat.st_size);
-                                        }
-                                }
-                                closedir(dir_stream);
-                        }
-                        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
+                        sls(cmdline, retval);
                         cleanup(&c);
                         continue;
                 }
