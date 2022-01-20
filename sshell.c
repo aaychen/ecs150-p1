@@ -69,8 +69,8 @@ void fail(char *func) {
         exit(1); 
 }
 
-/* Display parsing error message on stderr */
-void parsing_error_message(char *error) {
+/* Display error message on stderr */
+void error_message(char *error) {
         fprintf(stderr, "Error: %s\n", error);
 }
 
@@ -80,7 +80,7 @@ void parsing_error_message(char *error) {
 int has_access_error(const char *fname) {
         int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd == -1 && errno == EACCES) { // if no permission to open file
-                fprintf(stderr, "Error: cannot open output file\n");
+                error_message("cannot open output file");
                 return 1;
         }
         close(fd);
@@ -123,7 +123,7 @@ int read_cmd_args(cmdline *cmdline, char prev_char, char ch) {
         } 
 
         if (cmdline->cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
-                parsing_error_message("too many process arguments");
+                error_message("too many process arguments");
                 return 1;
         }
 
@@ -144,16 +144,16 @@ int parsing_cmdline(cmdline *c, char *cmdline) {
                 } else if (ch == '|') {
                         if (c->has_redirection) { // check redirection location
                                 if (c->outfile == NULL) { // check if output file given first
-                                        parsing_error_message("no output file");
+                                        error_message("no output file");
                                         return 1;
                                 }
-                                parsing_error_message("mislocated output redirection");
+                                error_message("mislocated output redirection");
                                 return 1;
                         }
 
                         c->num_pipes++;
                         if (c->num_pipes > c->num_cmds) {
-                                parsing_error_message("missing command");
+                                error_message("missing command");
                                 return 1;
                         }
                 } else if (c->num_pipes == c->num_cmds && c->num_cmds != 0 && !isspace(ch)) { // pipe sign was read in -> new command
@@ -163,7 +163,7 @@ int parsing_cmdline(cmdline *c, char *cmdline) {
                 } else if (c->has_redirection) {
                         if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers to output file
                                 if (c->num_cmds == 0) {
-                                        parsing_error_message("missing command");
+                                        error_message("missing command");
                                         return 1;
                                 }
 
@@ -194,18 +194,18 @@ void sshell_pwd(char *cmdline, int retval) {
         free(dir_path);
 }
 // cd()
-void sshell_cd(char *input, cmdline c, int cmd_indx, int retval) {
+void sshell_cd(cmdline c, char *cmdline, int cmd_indx, int retval) {
         if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
-                fprintf(stderr, "Error: cannot cd into directory\n");
+                error_message("cannot cd into directory");
                 retval = 1;
         }
-        fprintf(stderr, "+ completed '%s' [%d]\n", input, retval);
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
 }
 // sls()
 void sls(char *cmdline, int retval) {
         DIR *dir_stream = opendir(".");
         if (dir_stream == NULL) {
-                fprintf(stderr, "Error: cannot open directory\n");
+                error_message("cannot open directory");
                 retval = 1;
         } else {
                 struct dirent *item;
@@ -221,7 +221,7 @@ void sls(char *cmdline, int retval) {
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
 }
 
-/* Display completion message on stderr with return values of completed commands */
+/* Display completion message on stderr with return values of completed standard commands */
 void completion_message(char *cmdline, int cmd_indx, int *children_pid, int *children_exit) {
         int child_pid;
         for (int i = 0; i <= cmd_indx; i++) {
@@ -235,6 +235,52 @@ void completion_message(char *cmdline, int cmd_indx, int *children_pid, int *chi
                 fprintf(stderr, "[%d]", children_exit[i]);
         }
         fprintf(stderr, "\n");
+}
+
+/* Execute either a singular standard command or multiple commands in a pipeline */
+void pipeline(cmdline *c, char *cmdline) {
+        int child_pid;
+        int children_pid[c->num_cmds - 1];
+        int children_exit[c->num_cmds - 1];
+        int fd[2];
+        int prev_read_pipe = STDIN_FILENO;
+        for (int i = 0; i < c->num_cmds; i++) {
+                pipe(fd);
+                child_pid = fork();
+                if (child_pid < 0) {
+                        fail("fork");
+                }
+                
+                if (child_pid == 0) { // child process
+                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
+                                dup2(prev_read_pipe, STDIN_FILENO);
+                                close(prev_read_pipe);
+                        }
+                        if (i != c->num_cmds - 1) { // if not last command
+                                dup2(fd[1], STDOUT_FILENO);
+                                if (c->error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
+                        } else if (c->has_redirection) { // if have redirection to file
+                                        int outfile_fd = open(c->outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                        dup2(outfile_fd, STDOUT_FILENO);
+                                        if (c->error_to_file) dup2(outfile_fd, STDERR_FILENO);
+                                        close(outfile_fd);
+                        }
+                        close(fd[0]);
+                        close(fd[1]);
+                        execvp(c->cmd[i].args[0], c->cmd[i].args);
+                        error_message("command not found");
+                        exit(1);
+                } else { // parent process
+                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
+                                close(prev_read_pipe);
+                        }
+                        close(fd[1]);
+                        prev_read_pipe = fd[0];
+                        children_pid[i] = child_pid;
+                }
+        }
+        close(fd[0]);
+        completion_message(cmdline, c->num_cmds - 1, children_pid, children_exit);
 }
 
 int main(void) {
@@ -268,12 +314,12 @@ int main(void) {
                 bool parsing_error = parsing_cmdline(&c, cmdline);
                 // Handle parsing errors that were not detected when parsing the command line
                 if (!parsing_error && c.num_pipes == c.num_cmds) {
-                        parsing_error_message("missing command");
+                        error_message("missing command");
                         parsing_error = true;
                 }
                 if (!parsing_error && c.has_redirection) { // check output file
                         if (c.outfile == NULL) { // if no output file given
-                                parsing_error_message("no output file");
+                                error_message("no output file");
                                 parsing_error = true;
                         } else if (has_access_error(c.outfile)){ // check output file permissions
                                 parsing_error = true;
@@ -294,7 +340,7 @@ int main(void) {
                         cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "cd")) {
-                        sshell_cd(cmdline, c, c.num_cmds - 1, retval);
+                        sshell_cd(c, cmdline, c.num_cmds - 1, retval);
                         cleanup(&c);
                         continue;
                 } else if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "sls")) {
@@ -305,48 +351,7 @@ int main(void) {
 
                 /* Pipeline commands (regular commands) */
                 if (c.num_cmds >= 1) {
-                        int child_pid;
-                        int children_pid[c.num_cmds - 1];
-                        int children_exit[c.num_cmds - 1];
-                        int fd[2];
-                        int prev_read_pipe = STDIN_FILENO;
-                        for (int i = 0; i < c.num_cmds; i++) {
-                                pipe(fd);
-                                child_pid = fork();
-                                if (child_pid < 0) {
-                                        fail("fork");
-                                }
-                                
-                                if (child_pid == 0) { // child process
-                                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
-                                                dup2(prev_read_pipe, STDIN_FILENO);
-                                                close(prev_read_pipe);
-                                        }
-                                        if (i != c.num_cmds - 1) { // if not last command
-                                                dup2(fd[1], STDOUT_FILENO);
-                                                if (c.error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
-                                        } else if (c.has_redirection) { // if have redirection to file
-                                                        int outfile_fd = open(c.outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                                                        dup2(outfile_fd, STDOUT_FILENO);
-                                                        if (c.error_to_file) dup2(outfile_fd, STDERR_FILENO);
-                                                        close(outfile_fd);
-                                        }
-                                        close(fd[0]);
-                                        close(fd[1]);
-                                        execvp(c.cmd[i].args[0], c.cmd[i].args);
-                                        fprintf(stderr, "Error: command not found\n");
-                                        exit(1);
-                                } else { // parent process
-                                        if (prev_read_pipe != STDIN_FILENO) { // if not first command
-                                                close(prev_read_pipe);
-                                        }
-                                        close(fd[1]);
-                                        prev_read_pipe = fd[0];
-                                        children_pid[i] = child_pid;
-                                }
-                        }
-                        close(fd[0]);
-                        completion_message(cmdline, c.num_cmds - 1, children_pid, children_exit);
+                        pipeline(&c, cmdline);
                 }
                 cleanup(&c);
         }
