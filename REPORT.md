@@ -44,3 +44,8 @@ After the command-line structure has been created, `sshell` executes the parsed 
 Through a series of if-else statements, the program first determines whether the command is one of the four built-in commands: `exit()`, `pwd()`, `cd()`, and `sls()`.
 
 If the command is not built in, function `pipeline()` will use `exec()` to run the singular command. If a pipeline of commands is given, `pipeline()` executes the commands concurrently with a for loop; for each command, it forks a child process to execute the command. The parent process (the shell) waits for all of the child processes to finish before prompting for the next command line. If output redirection is specified, standard output will be redirected to the output file. Standard error will be forwarded to the output file or piped into the next command together with standard output if specified in the command line.
+
+## Testing
+After working on each phase, we manually tested our implementation to ensure that the current development phase had the expected functionality and to maintain functionality of any previous phases. When bugs were found, we focused on fixing those bugs and tested functionality of all phases completed thus far again before continuing to the next phase. We also used the given testing shell script provided for basic testing.
+
+For testing with dynamic memory, we ran the executable with `valgrind` to verify no memory leaks occurred. When we encountered the cases where `valgrind` detected that more memory blocks were being allocated than being freed, we used the `--track-malloc=yes` option with `valgrind` to debug where and which operations were missing deallocations.
