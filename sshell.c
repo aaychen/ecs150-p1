@@ -234,7 +234,7 @@ int main(void) {
                         } else if (prev_char == '>' && ch == '&') {
                                 c.error_to_file = true;
                         } else if (prev_char == '|' && ch == '&') {
-                                c.error_to_pipe[c.num_pipes] = true;
+                                c.error_to_pipe[c.num_pipes - 1] = true;
                         } else if (ch == '|') {
                                 if (c.has_redirection) { // check redirection location
                                         if (c.outfile == NULL) { // check if output file given first
