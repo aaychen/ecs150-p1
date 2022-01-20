@@ -74,8 +74,9 @@ void error_message(char *error) {
         fprintf(stderr, "Error: %s\n", error);
 }
 
-/** Handle cannot open output file error. If error occurs, this function will print the error message.
- *  @return 0 if no error, 1 if error occurs
+/** 
+ * Handle cannot open output file error. If error occurs, this function will print the error message.
+ * @return 0 if no error, 1 if error occurs
  */
 int has_access_error(const char *fname) {
         int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -107,7 +108,10 @@ void read_outfile(cmdline *cmdline, char prev_char, char ch) {
         strncat(cmdline->outfile, &ch, 1);
 }
 
-/* Read in commands or arguments */
+/**
+ * Read in commands or arguments
+ * @return 0 if no parsing error for too many arguments, 1 otherwise
+ */
 int read_cmd_args(cmdline *cmdline, char prev_char, char ch) {
         int cmd_indx = cmdline->num_cmds - 1;
         if (cmdline->num_cmds == 0) { // first command
@@ -130,7 +134,11 @@ int read_cmd_args(cmdline *cmdline, char prev_char, char ch) {
         strncat(cmdline->cmd[cmd_indx].args[arg_indx], &ch, 1);
         return 0;
 }
-/* Parse the given command line */
+
+/**
+ * Parse the given command line 
+ * @return 0 if no parsing error occurs, 1 otherwise
+ */
 int parsing_cmdline(cmdline *c, char *cmdline) {
         char prev_char = ' ';
         for (size_t i = 0; i < strlen(cmdline); i++) { // iterate through each character of command line
@@ -180,20 +188,21 @@ int parsing_cmdline(cmdline *c, char *cmdline) {
         return 0;
 }
 
-/* Builtin command */
-// exit()
+/* Run exit command (built in) */
 void sshell_exit(char *cmdline, int retval) {
         fprintf(stderr, "Bye...\n");
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
 }
-// pwd()
+
+/* Run pwd command (built in) */
 void sshell_pwd(char *cmdline, int retval) {
         char *dir_path = getcwd(NULL, 0);
         fprintf(stdout, "%s\n", dir_path);
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
         free(dir_path);
 }
-// cd()
+
+/* Run cd command (built in) */
 void sshell_cd(cmdline c, char *cmdline, int cmd_indx, int retval) {
         if (chdir(c.cmd[cmd_indx].args[1]) == -1) {
                 error_message("cannot cd into directory");
@@ -201,7 +210,8 @@ void sshell_cd(cmdline c, char *cmdline, int cmd_indx, int retval) {
         }
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
 }
-// sls()
+
+/* Run sls command (built in) */
 void sls(char *cmdline, int retval) {
         DIR *dir_stream = opendir(".");
         if (dir_stream == NULL) {
