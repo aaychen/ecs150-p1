@@ -31,9 +31,7 @@ typedef struct cmdline {
         bool error_to_file;
 } cmdline;
 
-/** Reset struct members to avoid double free when deallocating memory
- * @param cmdline struct cmdline with initialized members
- */
+/* Reset struct members to avoid double free when deallocating memory */
 void reset(cmdline *cmdline) {
         for (int i = 0; i < NUM_CMDS_MAX; i++) {
                 cmdline->cmd[i].num_args = 0;
@@ -48,9 +46,7 @@ void reset(cmdline *cmdline) {
         cmdline->error_to_file = false;
 }
 
-/** De-allocate memory to avoid memory leaks 
- *  @param cmdline struct cmdline with dynamic memory used
- */
+/* De-allocate memory to avoid memory leaks */
 void cleanup(cmdline *cmdline) {
         for (int i = 0; i < cmdline->num_cmds; i++) {
                 for (int j = 0; j < cmdline->cmd[i].num_args; j++) {
@@ -67,24 +63,18 @@ void cleanup(cmdline *cmdline) {
         }
 }
 
-/** Handle failure of library functions
- *  @param
- */
+/* Handle failure of library functions */
 void fail(char *func) {
         perror(func);
         exit(1); 
 }
 
-/** Display parsing error message on stderr
- *  @param
- */
-void parsing_error_message(bool *parsing_error, char *error) {
-        *parsing_error = true;
+/* Display parsing error message on stderr */
+void parsing_error_message(char *error) {
         fprintf(stderr, "Error: %s\n", error);
 }
 
 /** Handle cannot open output file error. If error occurs, this function will print the error message.
- *  @param fname the name of the file to check access/permissions for
  *  @return 0 if no error, 1 if error occurs
  */
 int has_access_error(const char *fname) {
@@ -97,6 +87,7 @@ int has_access_error(const char *fname) {
         return 0;
 }
 
+/* A new command after a pipe sign was detected */
 void new_cmd(cmdline *cmdline, char ch) {
         int cmd_indx = cmdline->num_cmds;
 
@@ -107,6 +98,7 @@ void new_cmd(cmdline *cmdline, char ch) {
         cmdline->cmd[cmd_indx].num_args++;
 }
 
+/* Read in an output file's name */
 void read_outfile(cmdline *cmdline, char prev_char, char ch) {
         if (prev_char == '>' || isspace(prev_char)) {
                 cmdline->outfile = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
@@ -115,7 +107,8 @@ void read_outfile(cmdline *cmdline, char prev_char, char ch) {
         strncat(cmdline->outfile, &ch, 1);
 }
 
-int read_cmd_args(cmdline *cmdline, char prev_char, char ch, bool *parsing_error) {
+/* Read in commands or arguments */
+int read_cmd_args(cmdline *cmdline, char prev_char, char ch) {
         int cmd_indx = cmdline->num_cmds - 1;
         if (cmdline->num_cmds == 0) { // first command
                 cmdline->num_cmds++;
@@ -130,11 +123,60 @@ int read_cmd_args(cmdline *cmdline, char prev_char, char ch, bool *parsing_error
         } 
 
         if (cmdline->cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
-                parsing_error_message(parsing_error, "too many process arguments");
+                parsing_error_message("too many process arguments");
                 return 1;
         }
 
         strncat(cmdline->cmd[cmd_indx].args[arg_indx], &ch, 1);
+        return 0;
+}
+/* Parse the given command line */
+int parsing_cmdline(cmdline *c, char *cmdline) {
+        char prev_char = ' ';
+        for (size_t i = 0; i < strlen(cmdline); i++) { // iterate through each character of command line
+                char ch = cmdline[i];
+                if (ch == '>') {
+                        c->has_redirection = true;
+                } else if (prev_char == '>' && ch == '&') {
+                        c->error_to_file = true;
+                } else if (prev_char == '|' && ch == '&') {
+                        c->error_to_pipe[c->num_pipes - 1] = true;
+                } else if (ch == '|') {
+                        if (c->has_redirection) { // check redirection location
+                                if (c->outfile == NULL) { // check if output file given first
+                                        parsing_error_message("no output file");
+                                        return 1;
+                                }
+                                parsing_error_message("mislocated output redirection");
+                                return 1;
+                        }
+
+                        c->num_pipes++;
+                        if (c->num_pipes > c->num_cmds) {
+                                parsing_error_message("missing command");
+                                return 1;
+                        }
+                } else if (c->num_pipes == c->num_cmds && c->num_cmds != 0 && !isspace(ch)) { // pipe sign was read in -> new command
+                        c->cmd[c->num_cmds - 1].args[c->cmd[c->num_cmds - 1].num_args++] = NULL; // append NULL to argument list of previous command
+                        
+                        new_cmd(c, ch); // new command
+                } else if (c->has_redirection) {
+                        if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers to output file
+                                if (c->num_cmds == 0) {
+                                        parsing_error_message("missing command");
+                                        return 1;
+                                }
+
+                                read_outfile(c, prev_char, ch);
+                        } else if (c->outfile != NULL && has_access_error(c->outfile)){ // check output file permissions
+                                return 1;
+                        }
+                } else if (!isspace(ch)) { // tokens are either first command or arguments
+                        if (read_cmd_args(c, prev_char, ch) == 1) return 1;
+                }
+                prev_char = ch;                     
+        }
+        c->cmd[c->num_cmds - 1].args[c->cmd[c->num_cmds - 1].num_args++] = NULL; // append NULL to argument list of last command
         return 0;
 }
 
@@ -179,9 +221,7 @@ void sls(char *cmdline, int retval) {
         fprintf(stderr, "+ completed '%s' [%d]\n", cmdline, retval);
 }
 
-/** Display completion message on stderr with return values of completed commands
- *  @param
- */
+/* Display completion message on stderr with return values of completed commands */
 void completion_message(char *cmdline, int cmd_indx, int *children_pid, int *children_exit) {
         int child_pid;
         for (int i = 0; i <= cmd_indx; i++) {
@@ -222,63 +262,19 @@ int main(void) {
                 nl = strchr(cmdline, '\n');
                 if (nl) *nl = '\0';
 
-                /* Parse command line (will throw errors when encountered incorrect commandline) */
+                /* Parse command line (will throw errors when encountered incorrect command line) */
                 if (strlen(cmdline) == 0) continue; // empty command line
                 reset(&c);
-                char prev_char = ' ';
-                bool parsing_error = false;
-                for (size_t i = 0; i < strlen(cmdline); i++) { // iterate through each character of commandline
-                        char ch = cmdline[i];
-                        if (ch == '>') {
-                                c.has_redirection = true;
-                        } else if (prev_char == '>' && ch == '&') {
-                                c.error_to_file = true;
-                        } else if (prev_char == '|' && ch == '&') {
-                                c.error_to_pipe[c.num_pipes - 1] = true;
-                        } else if (ch == '|') {
-                                if (c.has_redirection) { // check redirection location
-                                        if (c.outfile == NULL) { // check if output file given first
-                                                fprintf(stderr, "Error: no output file\n");
-                                                break;
-                                        }
-                                        parsing_error_message(&parsing_error, "mislocated output redirection");
-                                        break;
-                                }
-
-                                c.num_pipes++;
-                                if (c.num_pipes > c.num_cmds) {
-                                        parsing_error_message(&parsing_error, "missing command");
-                                        break;
-                                }
-                        } else if (c.num_pipes == c.num_cmds && c.num_cmds != 0 && !isspace(ch)) { // pipe sign was read in -> new command
-                                c.cmd[c.num_cmds - 1].args[c.cmd[c.num_cmds - 1].num_args++] = NULL; // append NULL to argument list of previous command
-                                
-                                new_cmd(&c, ch); // new command
-                        } else if (c.has_redirection) {
-                                if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers to output file
-                                        if (c.num_cmds == 0) {
-                                                parsing_error_message(&parsing_error, "missing command");
-                                                break;
-                                        }
-
-                                        read_outfile(&c, prev_char, ch);
-                                } else if (c.outfile != NULL && has_access_error(c.outfile)){ // check output file permissions
-                                        parsing_error = true;
-                                        break;
-                                }
-                        } else if (!isspace(ch)) { // tokens are either first command or arguments
-                                if (read_cmd_args(&c, prev_char, ch, &parsing_error) == 1) break;
-                        }
-                        prev_char = ch;                     
-                }
-                c.cmd[c.num_cmds - 1].args[c.cmd[c.num_cmds - 1].num_args++] = NULL; // append NULL to argument list of last command
-                // Handle parsing error
+                bool parsing_error = parsing_cmdline(&c, cmdline);
+                // Handle parsing errors that were not detected when parsing the command line
                 if (!parsing_error && c.num_pipes == c.num_cmds) {
-                        parsing_error_message(&parsing_error, "missing command");
+                        parsing_error_message("missing command");
+                        parsing_error = true;
                 }
                 if (!parsing_error && c.has_redirection) { // check output file
                         if (c.outfile == NULL) { // if no output file given
-                                parsing_error_message(&parsing_error, "no output file");
+                                parsing_error_message("no output file");
+                                parsing_error = true;
                         } else if (has_access_error(c.outfile)){ // check output file permissions
                                 parsing_error = true;
                         }
