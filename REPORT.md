@@ -25,6 +25,7 @@ The program's implementation is divided into two stages:
 An instance of `struct cmdline` holds a variety of information:
 - Number of commands entered
 - The individual command(s) to be run
+- Number of pipes
 - If output redirection is set, and the output file's name if applicable
 - If standard error is forwarded to either a file or another command in a pipeline
 
