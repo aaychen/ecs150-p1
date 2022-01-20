@@ -26,6 +26,7 @@ typedef struct cmdline {
         int num_cmds;
         bool has_redirection;
         char *outfile;
+        int num_pipes;
         bool error_to_pipe[NUM_PIPES_MAX];
         bool error_to_file;
 } cmdline;
@@ -40,6 +41,7 @@ void reset(cmdline *cmdline) {
         cmdline->num_cmds = 0;
         cmdline->has_redirection = false;
         cmdline->outfile = NULL;
+        cmdline->num_pipes = 0;
         for (int i = 0; i < NUM_PIPES_MAX; i++) {
                 cmdline->error_to_pipe[i] = false;
         }
@@ -92,6 +94,47 @@ int has_access_error(const char *fname) {
                 return 1;
         }
         close(fd);
+        return 0;
+}
+
+void new_cmd(cmdline *cmdline, char ch) {
+        int cmd_indx = cmdline->num_cmds;
+
+        cmdline->cmd[cmd_indx].args[0] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+        cmdline->num_cmds++;
+        if (!cmdline->cmd[cmd_indx].args[0]) fail("calloc");
+        strncat(cmdline->cmd[cmd_indx].args[0], &ch, 1);
+        cmdline->cmd[cmd_indx].num_args++;
+}
+
+void read_outfile(cmdline *cmdline, char prev_char, char ch) {
+        if (prev_char == '>' || isspace(prev_char)) {
+                cmdline->outfile = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                if (!cmdline->outfile) fail("calloc");
+        }
+        strncat(cmdline->outfile, &ch, 1);
+}
+
+int read_cmd_args(cmdline *cmdline, char prev_char, char ch, bool *parsing_error) {
+        int cmd_indx = cmdline->num_cmds - 1;
+        if (cmdline->num_cmds == 0) { // first command
+                cmdline->num_cmds++;
+                cmd_indx++;
+        } 
+        int arg_indx = cmdline->cmd[cmd_indx].num_args - 1;
+        
+        if (isspace(prev_char)) {
+                cmdline->cmd[cmd_indx].args[++arg_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
+                cmdline->cmd[cmd_indx].num_args++;
+                if (!cmdline->cmd[cmd_indx].args[arg_indx]) fail("calloc");
+        } 
+
+        if (cmdline->cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
+                parsing_error_message(parsing_error, "too many process arguments");
+                return 1;
+        }
+
+        strncat(cmdline->cmd[cmd_indx].args[arg_indx], &ch, 1);
         return 0;
 }
 
@@ -183,9 +226,9 @@ int main(void) {
                 /* Parse command line (will throw errors when encountered incorrect commandline) */
                 if (strlen(cmdline) == 0) continue; // empty command line
                 reset(&c);
-                int args_indx = -1;
+                /* int args_indx = -1;
                 int cmd_indx = -1;
-                int num_pipe = -1;
+                int num_pipe = -1; */
                 char prev_char = ' ';
                 bool parsing_error = false;
                 for (size_t i = 0; i < strlen(cmdline); i++) { // iterate through each character of commandline
@@ -195,7 +238,7 @@ int main(void) {
                         } else if (prev_char == '>' && ch == '&') {
                                 c.error_to_file = true;
                         } else if (prev_char == '|' && ch == '&') {
-                                c.error_to_pipe[num_pipe] = true;
+                                c.error_to_pipe[c.num_pipes] = true;
                         } else if (ch == '|') {
                                 if (c.has_redirection) { // check redirection location
                                         if (c.outfile == NULL) { // check if output file given first
@@ -206,62 +249,36 @@ int main(void) {
                                         break;
                                 }
 
-                                num_pipe++;
-                                if (num_pipe > cmd_indx) {
+                                c.num_pipes++;
+                                if (c.num_pipes > c.num_cmds) {
                                         parsing_error_message(&parsing_error, "missing command");
                                         break;
                                 }
-                        } else if (num_pipe == cmd_indx && cmd_indx != -1 && !isspace(ch)) { // pipe sign was read in -> new command
-                                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of previous command
+                        } else if (c.num_pipes == c.num_cmds && c.num_cmds != 0 && !isspace(ch)) { // pipe sign was read in -> new command
+                                c.cmd[c.num_cmds - 1].args[c.cmd[c.num_cmds - 1].num_args++] = NULL; // append NULL to argument list of previous command
                                 
-                                // New command
-                                args_indx = -1;
-                                c.num_cmds++;
-                                c.cmd[++cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                if (!c.cmd[cmd_indx].args[args_indx]) fail("calloc");
-                                c.cmd[cmd_indx].num_args++;
-                                strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
+                                new_cmd(&c, ch); // new command
                         } else if (c.has_redirection) {
                                 if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
-                                        if (cmd_indx == -1) {
+                                        if (c.num_cmds == 0) {
                                                 parsing_error_message(&parsing_error, "missing command");
                                                 break;
                                         }
 
-                                        if (prev_char == '>' || isspace(prev_char)) {
-                                                c.outfile = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                                if (!c.outfile) fail("calloc");
-                                        }
-                                        strncat(c.outfile, &ch, 1);
+                                        read_outfile(&c, prev_char, ch);
                                 } else if (c.outfile != NULL && has_access_error(c.outfile)){ // check output file permissions
                                         parsing_error = true;
                                         break;
                                 }
                         }
                         else if (!isspace(ch)) { // tokens are either first command or arguments
-                                if (cmd_indx == -1) { // first command
-                                        c.num_cmds++;
-                                        cmd_indx++;
-                                }
-
-                                if (isspace(prev_char)) {
-                                        c.cmd[cmd_indx].args[++args_indx] = calloc(TOKEN_LEN_MAX + 1, sizeof(char));
-                                        if (!c.cmd[cmd_indx].args[args_indx]) fail("calloc");
-                                        c.cmd[cmd_indx].num_args++;
-                                } 
-
-                                if (c.cmd[cmd_indx].num_args > ARG_MAX) { // check number of arguments
-                                        parsing_error_message(&parsing_error, "too many process arguments");
-                                        break;
-                                }
-
-                                strncat(c.cmd[cmd_indx].args[args_indx], &ch, 1);
+                                if (read_cmd_args(&c, prev_char, ch, &parsing_error) == 1) break;
                         }
                         prev_char = ch;                     
                 }
-                c.cmd[cmd_indx].args[++args_indx] = NULL; // append NULL to argument list of last command
+                c.cmd[c.num_cmds - 1].args[c.cmd[c.num_cmds - 1].num_args++] = NULL; // append NULL to argument list of last command
                 // Handle parsing error
-                if (!parsing_error && num_pipe == cmd_indx) {
+                if (!parsing_error && c.num_pipes == c.num_cmds) {
                         parsing_error_message(&parsing_error, "missing command");
                 }
                 if (!parsing_error && c.has_redirection) { // check output file
@@ -275,34 +292,36 @@ int main(void) {
                         cleanup(&c);
                         continue;
                 }
+
                 
+
                 /* Builtin command */
-                if (!strcmp(c.cmd[cmd_indx].args[0], "exit")) {
+                if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "exit")) {
                         sshell_exit(cmdline, retval);
                         cleanup(&c);
                         break;
-                } else if (!strcmp(c.cmd[cmd_indx].args[0], "pwd")) {
+                } else if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "pwd")) {
                         sshell_pwd(cmdline, retval);
                         cleanup(&c);
                         continue;
-                } else if (!strcmp(c.cmd[cmd_indx].args[0], "cd")) {
-                        sshell_cd(cmdline, c, cmd_indx, retval);
+                } else if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "cd")) {
+                        sshell_cd(cmdline, c, c.num_cmds - 1, retval);
                         cleanup(&c);
                         continue;
-                } else if (!strcmp(c.cmd[cmd_indx].args[0], "sls")) {
+                } else if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "sls")) {
                         sls(cmdline, retval);
                         cleanup(&c);
                         continue;
                 }
 
                 /* Pipeline commands (regular commands) */
-                if (cmd_indx >= 0) {
+                if (c.num_cmds >= 1) {
                         int child_pid;
-                        int children_pid[cmd_indx];
-                        int children_exit[cmd_indx];
+                        int children_pid[c.num_cmds - 1];
+                        int children_exit[c.num_cmds - 1];
                         int fd[2];
                         int prev_read_pipe = STDIN_FILENO;
-                        for (int i = 0; i <= cmd_indx; i++) {
+                        for (int i = 0; i < c.num_cmds; i++) {
                                 pipe(fd);
                                 child_pid = fork();
                                 if (child_pid < 0) {
@@ -314,7 +333,7 @@ int main(void) {
                                                 dup2(prev_read_pipe, STDIN_FILENO);
                                                 close(prev_read_pipe);
                                         }
-                                        if (i != cmd_indx) { // if not last command
+                                        if (i != c.num_cmds - 1) { // if not last command
                                                 dup2(fd[1], STDOUT_FILENO);
                                                 if (c.error_to_pipe[i]) dup2(fd[1], STDERR_FILENO);
                                         } else if (c.has_redirection) { // if have redirection to file
@@ -338,7 +357,7 @@ int main(void) {
                                 }
                         }
                         close(fd[0]);
-                        completion_message(cmdline, cmd_indx, children_pid, children_exit);
+                        completion_message(cmdline, c.num_cmds - 1, children_pid, children_exit);
                 }
                 cleanup(&c);
         }
