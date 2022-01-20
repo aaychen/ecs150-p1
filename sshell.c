@@ -220,15 +220,11 @@ int main(void) {
 
                 /* Remove trailing newline from command line */
                 nl = strchr(cmdline, '\n');
-                if (nl)
-                        *nl = '\0';
+                if (nl) *nl = '\0';
 
                 /* Parse command line (will throw errors when encountered incorrect commandline) */
                 if (strlen(cmdline) == 0) continue; // empty command line
                 reset(&c);
-                /* int args_indx = -1;
-                int cmd_indx = -1;
-                int num_pipe = -1; */
                 char prev_char = ' ';
                 bool parsing_error = false;
                 for (size_t i = 0; i < strlen(cmdline); i++) { // iterate through each character of commandline
@@ -259,7 +255,7 @@ int main(void) {
                                 
                                 new_cmd(&c, ch); // new command
                         } else if (c.has_redirection) {
-                                if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers output file
+                                if (!isspace(ch)) { // redirection symbol was read in -> rest of command line refers to output file
                                         if (c.num_cmds == 0) {
                                                 parsing_error_message(&parsing_error, "missing command");
                                                 break;
@@ -270,8 +266,7 @@ int main(void) {
                                         parsing_error = true;
                                         break;
                                 }
-                        }
-                        else if (!isspace(ch)) { // tokens are either first command or arguments
+                        } else if (!isspace(ch)) { // tokens are either first command or arguments
                                 if (read_cmd_args(&c, prev_char, ch, &parsing_error) == 1) break;
                         }
                         prev_char = ch;                     
@@ -292,8 +287,6 @@ int main(void) {
                         cleanup(&c);
                         continue;
                 }
-
-                
 
                 /* Builtin command */
                 if (!strcmp(c.cmd[c.num_cmds - 1].args[0], "exit")) {
